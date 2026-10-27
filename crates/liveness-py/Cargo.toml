@@ -1,0 +1,11 @@
+[package]
+name = "liveness-py"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["extension-module"] }
+liveness-core = { path = "../liveness-core" }

@@ -1,0 +1,23 @@
+[package]
+edition = "2021"
+name = "liveness_node"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi-derive = "3.0.0"
+liveness-core = { path = "../liveness-core"}
+
+[dependencies.napi]
+version = "3.0.0"
+features = ["napi10"]
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"

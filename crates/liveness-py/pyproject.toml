@@ -1,0 +1,23 @@
+[project]
+name = "liveness-py"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "wiseman-umanah", email = "wisemanumanah@gmail.com" }
+]
+requires-python = ">=3.15"
+dependencies = [
+    "maturin>=1.15.0",
+]
+
+[project.scripts]
+liveness-py = "liveness_py:main"
+
+[build-system]
+requires = ["maturin>=1.15,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+module-name = "liveness_py"
+manifest-path = "Cargo.toml"
