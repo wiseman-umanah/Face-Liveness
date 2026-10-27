@@ -1,0 +1,11 @@
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum LivenessError {
+    #[error("invalid frame: {0}")]
+    InvalidFrame(String),
+    #[error("model error: {0}")]
+    Model(String),
+}
+
+pub type Result<T> = std::result::Result<T, LivenessError>;
