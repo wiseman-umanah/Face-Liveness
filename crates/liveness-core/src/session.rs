@@ -70,6 +70,22 @@ impl LivenessSession {
         now_ms: u64,
         faces: &[FaceSignals],
     ) -> (Status, Vec<Challenge>) {
+        let primary = match faces {
+            [face] => Some(*face),
+            _ => None,
+        };
+        self.observe(now_ms, faces.len(), primary)
+    }
+
+    /// For callers that only measure one face: `face_count` faces are in view and
+    /// `primary` holds the measurements of the main one, if it could be measured.
+    /// Returns the status and the actions detected in this frame.
+    pub fn observe(
+        &mut self,
+        now_ms: u64,
+        face_count: usize,
+        primary: Option<FaceSignals>,
+    ) -> (Status, Vec<Challenge>) {
         // The face-lost clock only starts once a face has been seen; before that,
         // only the session timeouts apply.
         if let Some(last) = self.last_face_ms
@@ -78,10 +94,10 @@ impl LivenessSession {
             return (self.challenges.fail(FailReason::FaceLost), vec![]);
         }
 
-        if !faces.is_empty() {
+        if face_count > 0 || primary.is_some() {
             self.last_face_ms = Some(now_ms);
         }
-        if faces.len() > 1 {
+        if face_count > 1 {
             let since = *self.multiple_faces_since.get_or_insert(now_ms);
             if now_ms.saturating_sub(since) >= self.config.multiple_faces_ms {
                 return (self.challenges.fail(FailReason::MultipleFaces), vec![]);
@@ -92,7 +108,7 @@ impl LivenessSession {
 
         let mut detected = vec![];
         // With several faces we can't tell whose actions we'd be measuring.
-        if let [face] = faces {
+        if let (0 | 1, Some(face)) = (face_count, primary) {
             if self.blink.update(face.ear, now_ms) {
                 detected.push(Challenge::Blink);
             }

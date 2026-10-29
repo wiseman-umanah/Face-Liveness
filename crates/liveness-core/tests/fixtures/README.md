@@ -12,3 +12,10 @@ a face are not written, so a jump in `ts_ms` means the face was lost.
 
 There are no hand labels yet (true blink/turn counts), so tests lock in current
 behaviour and Python parity rather than accuracy. Record labelled sessions to measure accuracy.
+
+# Images
+
+| File | Source | Notes |
+|---|---|---|
+| `astronaut_face.png` | 256x256 crop (x 96-352, y 0-256) of scikit-image's `astronaut.png`: NASA photo of astronaut Eileen Collins, public domain | Face for the vision tests |
+| `astronaut_face_mediapipe.csv` | MediaPipe FaceLandmarker 0.10.14 (`face_landmarker.task` float16/1) run on `astronaut_face.png` | Reference landmarks and signals the Rust pipeline is compared against |

@@ -10,7 +10,12 @@ repository = "https://github.com/wiseman-umanah/Face-Liveness"
 rust-version = "1.88"
 
 [workspace.dependencies]
-liveness-core = { path = "crates/liveness-core" }
+# Bindings opt into `vision` once they expose it (Phase 3).
+liveness-core = { path = "crates/liveness-core", default-features = false }
+
+# Neural-network inference is 10-50x slower unoptimized; keep dependencies fast in dev/test builds.
+[profile.dev.package."*"]
+opt-level = 3
 
 [profile.release]
 lto = true

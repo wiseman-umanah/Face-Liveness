@@ -7,5 +7,22 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["vision"]
+# Face detection + landmarks from raw frames, using bundled ONNX models and pure-Rust inference.
+vision = ["dep:tract-onnx"]
+
 [dependencies]
 thiserror = "2.0.21"
+tract-onnx = { version = "0.23.9", optional = true }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[[example]]
+name = "analyze_image"
+required-features = ["vision"]
+
+[[example]]
+name = "video"
+required-features = ["vision"]

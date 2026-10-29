@@ -83,7 +83,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ### Replay a recording
 
-`crates/liveness-core/tests/fixtures/` holds recorded sessions (per-frame face measurements, no images). Replay one through the detectors:
+`crates/liveness-core/tests/fixtures/session_*.csv` are recorded sessions (per-frame face measurements, no images). Replay one through the detectors:
 
 ```bash
 cargo run -p liveness-core --release --example replay -- crates/liveness-core/tests/fixtures/session_01.csv
@@ -97,6 +97,28 @@ cargo run -p liveness-core --release --example replay -- \
 ```
 
 Record your own with `prototype/probe.py my_session.csv` (needs `opencv-python` and `mediapipe`).
+
+### Run on a photo, video or webcam
+
+The Rust core finds faces and landmarks itself, using MediaPipe's face models converted to ONNX
+and run in pure Rust (see `crates/liveness-core/models/README.md`). The first release build takes
+several minutes.
+
+```bash
+# A photo: faces found, eye/mouth/head measurements, time per frame
+cargo run -p liveness-core --release --example analyze_image -- crates/liveness-core/tests/fixtures/astronaut_face.png
+
+# A video file, via ffmpeg (set --size and --fps to the video's)
+ffmpeg -loglevel error -i clip.mp4 -f rawvideo -pix_fmt rgb24 - \
+  | cargo run -p liveness-core --release --example video -- --size 640x480 --fps 30 --csv clip.csv
+
+# Your webcam, as a live liveness check (Linux)
+ffmpeg -loglevel error -f v4l2 -video_size 640x480 -i /dev/video0 -vf fps=15 -f rawvideo -pix_fmt rgb24 - \
+  | cargo run -p liveness-core --release --example video -- --size 640x480 --live --random 3
+```
+
+`--csv` writes the same format as `probe.py`, so a video can be replayed with the `replay` example
+or compared with Google's MediaPipe using `tools/mediapipe_csv.py` and `tools/compare_csv.py`.
 
 ### Node.js bindings
 
