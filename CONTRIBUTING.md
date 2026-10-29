@@ -62,8 +62,9 @@ uv sync
 Please follow these guidelines:
 
 - Keep shared functionality in `liveness-core` whenever it can be reused by multiple language bindings.
-- Keep Python-specific integration code in `liveness-py`.
-- Keep Node.js-specific integration code in `liveness-node`.
+- Keep Python-specific integration code in `liveness-py` (the `faceliveness` Python package).
+- Keep Node.js-specific integration code in `liveness-node` (the `faceliveness` npm package).
+- When behaviour changes, update `tests/conformance/cases.json` so every language checks it.
 - Avoid duplicating core business logic across language bindings.
 - Prefer clear, descriptive names.
 - Document public APIs and non-obvious implementation decisions.

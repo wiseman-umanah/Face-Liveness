@@ -31,11 +31,12 @@ face-liveness/
 
 ### Components
 
-- **`liveness-core`** — shared functionality implemented in Rust.
-- **`liveness-py`** — Python bindings built with PyO3 and Maturin.
-- **`liveness-node`** — Node.js bindings built with napi-rs.
+- **`liveness-core`** — the Rust core: face detection and landmarks, action detectors, challenge flow.
+- **`liveness-py`** — the [`faceliveness`](crates/liveness-py/README.md) Python package (PyO3 + maturin).
+- **`liveness-node`** — the [`faceliveness`](crates/liveness-node/README.md) npm package (napi-rs).
 
-The language bindings are intended to expose shared Rust functionality without duplicating its implementation.
+The bindings are thin wrappers: all logic lives in `liveness-core`, and the shared cases in
+`tests/conformance/cases.json` check that Rust, Python and Node give identical results.
 
 ## Prerequisites
 
@@ -120,33 +121,7 @@ ffmpeg -loglevel error -f v4l2 -video_size 640x480 -i /dev/video0 -vf fps=15 -f 
 `--csv` writes the same format as `probe.py`, so a video can be replayed with the `replay` example
 or compared with Google's MediaPipe using `tools/mediapipe_csv.py` and `tools/compare_csv.py`.
 
-### Node.js bindings
-
-Navigate to the Node.js crate:
-
-```bash
-cd crates/liveness-node
-```
-
-Install dependencies, build the native addon and run the tests:
-
-```bash
-pnpm install
-pnpm build
-pnpm test
-```
-
-Then, from the same directory:
-
-```javascript
-const { version } = require("./");
-
-console.log(version());
-```
-
-### Python bindings
-
-The Python bindings live in `crates/liveness-py` and support Python 3.9+.
+### Python package
 
 ```bash
 cd crates/liveness-py
@@ -155,10 +130,57 @@ uv run pytest
 ```
 
 ```python
-import liveness_py
+import faceliveness
 
-print(liveness_py.version())
+engine = faceliveness.Engine.random(3)
+result = engine.process(frame, timestamp_ms, format="bgr")  # an OpenCV frame
+print(result.status, result.current_challenge)
 ```
+
+See [crates/liveness-py/README.md](crates/liveness-py/README.md) for the full API.
+
+### Node.js package
+
+```bash
+cd crates/liveness-node
+pnpm install
+pnpm build       # native addon + TypeScript types
+pnpm test
+```
+
+```ts
+import { Engine } from 'faceliveness'
+
+const engine = Engine.random(3)
+const result = await engine.processAsync(frame, { width: 640, height: 480, timestampMs })
+console.log(result.status, result.currentChallenge)
+```
+
+See [crates/liveness-node/README.md](crates/liveness-node/README.md) for the full API.
+
+### Conformance tests
+
+`tests/conformance/cases.json` holds recorded sessions and photo runs with their expected
+outcomes. `cargo test -p liveness-core --test conformance`, `uv run pytest` and `pnpm test`
+all run them; Rust is the reference, and a case with `"expected": null` makes the Rust test
+print the actual result to paste in.
+
+## Releasing
+
+`.github/workflows/release.yml` builds wheels and npm packages for Linux (x64, arm64), macOS
+(Intel, Apple Silicon) and Windows x64, tests them, and publishes when a `v*` tag is pushed.
+
+One-time setup:
+
+1. GitHub → Settings → Environments: create `release` (add yourself as required reviewer to
+   approve each publish).
+2. PyPI: add a [trusted publisher](https://docs.pypi.org/trusted-publishers/) for project
+   `faceliveness`, this repository, workflow `release.yml`, environment `release`.
+3. npm: create an automation token and save it as `NPM_TOKEN` in the `release` environment.
+
+To release, set the same version in `Cargo.toml`, `crates/liveness-py/pyproject.toml` and
+`crates/liveness-node/package.json`, commit, then tag `vX.Y.Z` and push the tag. Run the
+workflow manually (Actions → Release → Run workflow) to build everything without publishing.
 
 ## Development
 
@@ -174,15 +196,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## Roadmap
 
-Planned work may include:
+Done:
 
-- Expanding the shared Rust API.
-- Exposing supported functionality through Python and Node.js.
-- Adding automated tests for the core and language bindings.
-- Improving cross-platform builds and packaging.
-- Developing and evaluating face-liveness functionality.
+- Adaptive blink, mouth-open and head-turn detectors, tuned on recorded sessions.
+- Face detection and 478-point landmarks in pure Rust, matching MediaPipe.
+- `faceliveness` packages for Python and Node.js, with cross-language conformance tests.
 
-The roadmap may change as the project evolves.
+Next:
+
+- Passive anti-spoofing (screen and print detection) and server-verifiable signed results.
+- Browser (WASM) build and a live demo.
+- iOS and Android bindings.
+- Smaller packages and faster inference.
 
 ## Contributing
 

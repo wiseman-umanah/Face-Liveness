@@ -11,8 +11,9 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+getrandom = "0.3"
+liveness-core = { workspace = true, features = ["vision"] }
 napi-derive = "3.0.0"
-liveness-core.workspace = true
 
 [dependencies.napi]
 version = "3.0.0"

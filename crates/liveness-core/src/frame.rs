@@ -3,9 +3,43 @@ use crate::error::{LivenessError, Result};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PixelFormat {
     Rgb8,
+    /// OpenCV's default channel order.
+    Bgr8,
     Rgba8,
     Bgra8,
     Nv21, // common Android camera format
+}
+
+impl PixelFormat {
+    pub const ALL: [PixelFormat; 5] = [
+        PixelFormat::Rgb8,
+        PixelFormat::Bgr8,
+        PixelFormat::Rgba8,
+        PixelFormat::Bgra8,
+        PixelFormat::Nv21,
+    ];
+
+    /// Short lowercase name used by the language bindings ("rgb", "bgr", "rgba", "bgra", "nv21").
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PixelFormat::Rgb8 => "rgb",
+            PixelFormat::Bgr8 => "bgr",
+            PixelFormat::Rgba8 => "rgba",
+            PixelFormat::Bgra8 => "bgra",
+            PixelFormat::Nv21 => "nv21",
+        }
+    }
+}
+
+impl std::str::FromStr for PixelFormat {
+    type Err = LivenessError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|f| f.as_str() == s)
+            .ok_or_else(|| LivenessError::InvalidFrame(format!("unknown pixel format {s:?}")))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,6 +48,21 @@ pub enum Rotation {
     Deg90,
     Deg180,
     Deg270,
+}
+
+impl Rotation {
+    /// Clockwise degrees needed to turn the buffer upright: 0, 90, 180 or 270.
+    pub fn from_degrees(degrees: u32) -> Result<Self> {
+        match degrees {
+            0 => Ok(Rotation::Deg0),
+            90 => Ok(Rotation::Deg90),
+            180 => Ok(Rotation::Deg180),
+            270 => Ok(Rotation::Deg270),
+            other => Err(LivenessError::InvalidFrame(format!(
+                "rotation must be 0, 90, 180 or 270, got {other}"
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -41,7 +90,7 @@ impl Frame<'_> {
             self.stride as usize,
         );
         let (min_stride, rows) = match self.format {
-            PixelFormat::Rgb8 => (w.checked_mul(3), h),
+            PixelFormat::Rgb8 | PixelFormat::Bgr8 => (w.checked_mul(3), h),
             PixelFormat::Rgba8 | PixelFormat::Bgra8 => (w.checked_mul(4), h),
             // Y plane: h rows of w bytes, then an interleaved VU plane of
             // ceil(h/2) rows of 2 * ceil(w/2) bytes, both using the same stride.
@@ -142,6 +191,16 @@ mod tests {
                 .validate()
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn names_round_trip() {
+        for f in PixelFormat::ALL {
+            assert_eq!(f.as_str().parse::<PixelFormat>().unwrap(), f);
+        }
+        assert!("yuv".parse::<PixelFormat>().is_err());
+        assert_eq!(Rotation::from_degrees(270).unwrap(), Rotation::Deg270);
+        assert!(Rotation::from_degrees(45).is_err());
     }
 
     #[test]

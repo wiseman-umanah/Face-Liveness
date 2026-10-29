@@ -12,5 +12,6 @@ name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
+getrandom = "0.3"
+liveness-core = { workspace = true, features = ["vision"] }
 pyo3 = { version = "0.30", features = ["extension-module", "abi3-py39"] }
-liveness-core.workspace = true

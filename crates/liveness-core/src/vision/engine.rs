@@ -69,3 +69,9 @@ impl LivenessEngine {
         self.analyzer
     }
 }
+
+// The bindings run the engine off the main thread (Python without the GIL, Node's thread pool).
+const _: fn() = || {
+    fn assert_send<T: Send>() {}
+    assert_send::<LivenessEngine>();
+};

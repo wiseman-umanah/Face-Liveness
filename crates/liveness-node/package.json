@@ -1,7 +1,7 @@
 {
-  "name": "liveness_node",
+  "name": "faceliveness",
   "version": "0.1.0",
-  "description": "Node.js bindings for the face-liveness Rust core",
+  "description": "On-device face liveness checks (blink, head turn, mouth open) powered by a Rust core",
   "main": "index.js",
   "types": "index.d.ts",
   "repository": {
@@ -11,9 +11,11 @@
   },
   "license": "Apache-2.0",
   "keywords": [
-    "face-liveness",
-    "liveness-detection",
+    "face",
+    "liveness",
     "anti-spoofing",
+    "biometrics",
+    "kyc",
     "napi-rs",
     "rust"
   ],
@@ -22,10 +24,15 @@
     "index.js"
   ],
   "napi": {
-    "binaryName": "liveness_node",
+    "binaryName": "faceliveness",
     "targets": [
-      "x86_64-unknown-linux-gnu"
-    ]
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc"
+    ],
+    "dtsHeaderFile": "types-header.d.ts"
   },
   "engines": {
     "node": ">= 22.14.0 < 23 || >= 23.6.0"

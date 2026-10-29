@@ -1,0 +1,159 @@
+{
+  "description": "Shared cases every binding must reproduce exactly (signals within `tolerance`). Paths are relative to the repository root. Run by crates/liveness-core/tests/conformance.rs, crates/liveness-py/tests/test_conformance.py and crates/liveness-node/__test__/conformance.spec.ts.",
+  "tolerance": 0.001,
+  "session_cases": [
+    {
+      "name": "recorded_turns_and_mouth_pass",
+      "challenges": ["turn_left", "turn_right", "open_mouth"],
+      "config": {},
+      "recording": "crates/liveness-core/tests/fixtures/session_03.csv",
+      "from_ms": 25000,
+      "expected": {
+        "actions": [
+          [27753, "turn_left"],
+          [30452, "turn_right"],
+          [33508, "open_mouth"]
+        ],
+        "at_ms": 33508,
+        "fail_reason": null,
+        "status": "passed"
+      }
+    },
+    {
+      "name": "recorded_blinks_with_long_timeouts",
+      "challenges": ["blink", "blink", "blink", "open_mouth", "turn_left"],
+      "config": {
+        "total_timeout_ms": 1000000000000,
+        "step_timeout_ms": 1000000000000
+      },
+      "recording": "crates/liveness-core/tests/fixtures/session_01.csv",
+      "from_ms": 3000,
+      "expected": {
+        "actions": [
+          [5187, "turn_left"],
+          [7083, "turn_right"],
+          [9132, "open_mouth"],
+          [12079, "open_mouth"],
+          [14275, "open_mouth"],
+          [15776, "turn_left"],
+          [16524, "open_mouth"],
+          [17124, "blink"],
+          [17423, "blink"],
+          [18320, "blink"],
+          [19720, "blink"],
+          [19968, "blink"],
+          [20568, "blink"],
+          [21168, "blink"],
+          [22568, "open_mouth"],
+          [22568, "turn_right"],
+          [24712, "open_mouth"],
+          [30555, "blink"],
+          [31756, "blink"],
+          [37596, "blink"],
+          [37996, "turn_left"]
+        ],
+        "at_ms": 37996,
+        "fail_reason": null,
+        "status": "passed"
+      }
+    },
+    {
+      "name": "recorded_face_lost",
+      "challenges": ["blink", "blink", "blink", "blink", "blink", "blink", "blink", "blink", "blink", "blink", "blink", "blink"],
+      "config": {
+        "total_timeout_ms": 1000000000000,
+        "step_timeout_ms": 1000000000000
+      },
+      "recording": "crates/liveness-core/tests/fixtures/session_02.csv",
+      "from_ms": 0,
+      "expected": {
+        "actions": [
+          [5744, "blink"],
+          [6591, "blink"],
+          [7689, "blink"],
+          [8388, "blink"],
+          [9383, "blink"],
+          [10182, "blink"],
+          [10980, "blink"],
+          [11727, "blink"],
+          [12427, "blink"],
+          [13225, "blink"],
+          [19010, "turn_left"],
+          [23150, "turn_right"],
+          [26395, "turn_left"],
+          [29888, "turn_right"],
+          [31635, "blink"],
+          [51398, "open_mouth"],
+          [54041, "open_mouth"],
+          [59635, "open_mouth"],
+          [61230, "open_mouth"],
+          [62630, "open_mouth"]
+        ],
+        "at_ms": 96826,
+        "fail_reason": "face_lost",
+        "status": "failed"
+      }
+    },
+    {
+      "name": "recorded_step_timeout",
+      "challenges": ["blink"],
+      "config": {},
+      "recording": "crates/liveness-core/tests/fixtures/session_03.csv",
+      "from_ms": 0,
+      "expected": {
+        "actions": [],
+        "at_ms": 10250,
+        "fail_reason": "step_timeout",
+        "status": "failed"
+      }
+    }
+  ],
+  "engine_cases": [
+    {
+      "name": "still_photo_rgb_times_out",
+      "challenges": ["blink"],
+      "config": {},
+      "image": "tests/conformance/astronaut_face.rgb",
+      "width": 256,
+      "height": 256,
+      "format": "rgb",
+      "frames": 23,
+      "interval_ms": 500,
+      "expected": {
+        "at_ms": 10500,
+        "face_counts": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        "fail_reason": "step_timeout",
+        "signals": {
+          "ear": 0.3165,
+          "mouth": 0.1671,
+          "yaw": 0.4751
+        },
+        "status": "failed"
+      }
+    },
+    {
+      "name": "still_photo_bgr_same_result",
+      "challenges": ["turn_left"],
+      "config": {
+        "step_timeout_ms": 2000
+      },
+      "image": "tests/conformance/astronaut_face.rgb",
+      "width": 256,
+      "height": 256,
+      "format": "bgr",
+      "frames": 6,
+      "interval_ms": 500,
+      "expected": {
+        "at_ms": 2500,
+        "face_counts": [1, 1, 1, 1, 1, 1],
+        "fail_reason": "step_timeout",
+        "signals": {
+          "ear": 0.3165,
+          "mouth": 0.1671,
+          "yaw": 0.4751
+        },
+        "status": "failed"
+      }
+    }
+  ]
+}

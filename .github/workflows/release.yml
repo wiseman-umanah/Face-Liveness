@@ -1,0 +1,202 @@
+name: Release
+
+# Push a tag like v0.1.0 to build and publish `faceliveness` to PyPI and npm.
+# The version in Cargo.toml, crates/liveness-py/pyproject.toml and
+# crates/liveness-node/package.json must match the tag.
+#
+# One-time setup (see README "Releasing"):
+#   - GitHub environment named "release" (add required reviewers to approve each publish)
+#   - PyPI trusted publisher for this repo + workflow + environment
+#   - NPM_TOKEN secret in the "release" environment
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: # builds everything without publishing
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  versions:
+    name: Check versions match the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare versions
+        run: |
+          cargo_v=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          py_v=$(grep -m1 '^version' crates/liveness-py/pyproject.toml | cut -d'"' -f2)
+          node_v=$(node -p "require('./crates/liveness-node/package.json').version")
+          echo "Cargo $cargo_v, Python $py_v, Node $node_v, ref ${GITHUB_REF_NAME}"
+          [ "$cargo_v" = "$py_v" ] && [ "$py_v" = "$node_v" ] || { echo "versions differ"; exit 1; }
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$cargo_v" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match version v$cargo_v"; exit 1
+          fi
+
+  wheels:
+    name: Wheel ${{ matrix.os }} ${{ matrix.target }}
+    needs: versions
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64 }
+          - { os: ubuntu-24.04-arm, target: aarch64 }
+          - { os: macos-latest, target: x86_64 }
+          - { os: macos-latest, target: aarch64 }
+          - { os: windows-latest, target: x64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/liveness-py
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: auto
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: crates/liveness-py/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: Python source distribution
+    needs: versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: crates/liveness-py
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: crates/liveness-py/dist/*.tar.gz
+          if-no-files-found: error
+
+  wheel-test:
+    name: Test wheel on ${{ matrix.os }}
+    needs: wheels
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, artifact: wheel-ubuntu-latest-x86_64 }
+          - { os: ubuntu-24.04-arm, artifact: wheel-ubuntu-24.04-arm-aarch64 }
+          - { os: macos-latest, artifact: wheel-macos-latest-aarch64 }
+          - { os: windows-latest, artifact: wheel-windows-latest-x64 }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+      - name: Install wheel and run tests against it
+        shell: bash
+        run: |
+          uv venv
+          uv pip install dist/*.whl pytest numpy
+          # The package sources live in crates/liveness-py/src, which is not on sys.path
+          # here, so the tests import the installed wheel.
+          uv run --no-project python -m pytest -q crates/liveness-py/tests
+
+  npm-build:
+    name: npm ${{ matrix.target }}
+    needs: versions
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: macos-latest, target: x86_64-apple-darwin }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+    defaults:
+      run:
+        working-directory: crates/liveness-node
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: crates/liveness-node/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: crates/liveness-node/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build --target ${{ matrix.target }}
+        shell: bash
+      - name: Test (native targets only)
+        if: ${{ !(matrix.os == 'macos-latest' && matrix.target == 'x86_64-apple-darwin') }}
+        run: pnpm test
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bindings-${{ matrix.target }}
+          path: crates/liveness-node/*.node
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI and npm
+    if: github.ref_type == 'tag'
+    needs: [sdist, wheel-test, npm-build]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # PyPI trusted publishing and npm provenance
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheel-*
+          path: python-dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdist
+          path: python-dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python-dist
+
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: crates/liveness-node/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Install dependencies
+        working-directory: crates/liveness-node
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: bindings-*
+          path: crates/liveness-node/artifacts
+      - name: Publish npm packages
+        working-directory: crates/liveness-node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          pnpm napi create-npm-dirs
+          pnpm napi artifacts
+          npm publish --provenance --access public

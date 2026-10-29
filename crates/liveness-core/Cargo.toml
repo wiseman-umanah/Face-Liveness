@@ -18,6 +18,7 @@ tract-onnx = { version = "0.23.9", optional = true }
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+serde_json = "1"
 
 [[example]]
 name = "analyze_image"

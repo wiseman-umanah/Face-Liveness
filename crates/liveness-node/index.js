@@ -70,13 +70,13 @@ function requireNative() {
   } else if (process.platform === 'android') {
     if (process.arch === 'arm64') {
       try {
-        return require('./liveness_node.android-arm64.node')
+        return require('./faceliveness.android-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-android-arm64')
-        const bindingPackageVersion = require('liveness_node-android-arm64/package.json').version
+        const binding = require('faceliveness-android-arm64')
+        const bindingPackageVersion = require('faceliveness-android-arm64/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -86,13 +86,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./liveness_node.android-arm-eabi.node')
+        return require('./faceliveness.android-arm-eabi.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-android-arm-eabi')
-        const bindingPackageVersion = require('liveness_node-android-arm-eabi/package.json').version
+        const binding = require('faceliveness-android-arm-eabi')
+        const bindingPackageVersion = require('faceliveness-android-arm-eabi/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -107,13 +107,13 @@ function requireNative() {
     if (process.arch === 'x64') {
       if ((process.config && process.config.variables && process.config.variables.shlib_suffix === 'dll.a') || (process.config && process.config.variables && process.config.variables.node_target_type === 'shared_library')) {
         try {
-        return require('./liveness_node.win32-x64-gnu.node')
+        return require('./faceliveness.win32-x64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-win32-x64-gnu')
-        const bindingPackageVersion = require('liveness_node-win32-x64-gnu/package.json').version
+        const binding = require('faceliveness-win32-x64-gnu')
+        const bindingPackageVersion = require('faceliveness-win32-x64-gnu/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -123,13 +123,13 @@ function requireNative() {
       }
       } else {
         try {
-        return require('./liveness_node.win32-x64-msvc.node')
+        return require('./faceliveness.win32-x64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-win32-x64-msvc')
-        const bindingPackageVersion = require('liveness_node-win32-x64-msvc/package.json').version
+        const binding = require('faceliveness-win32-x64-msvc')
+        const bindingPackageVersion = require('faceliveness-win32-x64-msvc/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -140,13 +140,13 @@ function requireNative() {
       }
     } else if (process.arch === 'ia32') {
       try {
-        return require('./liveness_node.win32-ia32-msvc.node')
+        return require('./faceliveness.win32-ia32-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-win32-ia32-msvc')
-        const bindingPackageVersion = require('liveness_node-win32-ia32-msvc/package.json').version
+        const binding = require('faceliveness-win32-ia32-msvc')
+        const bindingPackageVersion = require('faceliveness-win32-ia32-msvc/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -156,13 +156,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./liveness_node.win32-arm64-msvc.node')
+        return require('./faceliveness.win32-arm64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-win32-arm64-msvc')
-        const bindingPackageVersion = require('liveness_node-win32-arm64-msvc/package.json').version
+        const binding = require('faceliveness-win32-arm64-msvc')
+        const bindingPackageVersion = require('faceliveness-win32-arm64-msvc/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -175,13 +175,13 @@ function requireNative() {
     }
   } else if (process.platform === 'darwin') {
     try {
-      return require('./liveness_node.darwin-universal.node')
+      return require('./faceliveness.darwin-universal.node')
     } catch (e) {
       loadErrors.push(e)
     }
     try {
-      const binding = require('liveness_node-darwin-universal')
-      const bindingPackageVersion = require('liveness_node-darwin-universal/package.json').version
+      const binding = require('faceliveness-darwin-universal')
+      const bindingPackageVersion = require('faceliveness-darwin-universal/package.json').version
       if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
         throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
       }
@@ -191,13 +191,13 @@ function requireNative() {
     }
     if (process.arch === 'x64') {
       try {
-        return require('./liveness_node.darwin-x64.node')
+        return require('./faceliveness.darwin-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-darwin-x64')
-        const bindingPackageVersion = require('liveness_node-darwin-x64/package.json').version
+        const binding = require('faceliveness-darwin-x64')
+        const bindingPackageVersion = require('faceliveness-darwin-x64/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -207,13 +207,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./liveness_node.darwin-arm64.node')
+        return require('./faceliveness.darwin-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-darwin-arm64')
-        const bindingPackageVersion = require('liveness_node-darwin-arm64/package.json').version
+        const binding = require('faceliveness-darwin-arm64')
+        const bindingPackageVersion = require('faceliveness-darwin-arm64/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -227,13 +227,13 @@ function requireNative() {
   } else if (process.platform === 'freebsd') {
     if (process.arch === 'x64') {
       try {
-        return require('./liveness_node.freebsd-x64.node')
+        return require('./faceliveness.freebsd-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-freebsd-x64')
-        const bindingPackageVersion = require('liveness_node-freebsd-x64/package.json').version
+        const binding = require('faceliveness-freebsd-x64')
+        const bindingPackageVersion = require('faceliveness-freebsd-x64/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -243,13 +243,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./liveness_node.freebsd-arm64.node')
+        return require('./faceliveness.freebsd-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-freebsd-arm64')
-        const bindingPackageVersion = require('liveness_node-freebsd-arm64/package.json').version
+        const binding = require('faceliveness-freebsd-arm64')
+        const bindingPackageVersion = require('faceliveness-freebsd-arm64/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -264,13 +264,13 @@ function requireNative() {
     if (process.arch === 'x64') {
       if (isMusl()) {
         try {
-          return require('./liveness_node.linux-x64-musl.node')
+          return require('./faceliveness.linux-x64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-x64-musl')
-          const bindingPackageVersion = require('liveness_node-linux-x64-musl/package.json').version
+          const binding = require('faceliveness-linux-x64-musl')
+          const bindingPackageVersion = require('faceliveness-linux-x64-musl/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -280,13 +280,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./liveness_node.linux-x64-gnu.node')
+          return require('./faceliveness.linux-x64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-x64-gnu')
-          const bindingPackageVersion = require('liveness_node-linux-x64-gnu/package.json').version
+          const binding = require('faceliveness-linux-x64-gnu')
+          const bindingPackageVersion = require('faceliveness-linux-x64-gnu/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -298,13 +298,13 @@ function requireNative() {
     } else if (process.arch === 'arm64') {
       if (isMusl()) {
         try {
-          return require('./liveness_node.linux-arm64-musl.node')
+          return require('./faceliveness.linux-arm64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-arm64-musl')
-          const bindingPackageVersion = require('liveness_node-linux-arm64-musl/package.json').version
+          const binding = require('faceliveness-linux-arm64-musl')
+          const bindingPackageVersion = require('faceliveness-linux-arm64-musl/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -314,13 +314,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./liveness_node.linux-arm64-gnu.node')
+          return require('./faceliveness.linux-arm64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-arm64-gnu')
-          const bindingPackageVersion = require('liveness_node-linux-arm64-gnu/package.json').version
+          const binding = require('faceliveness-linux-arm64-gnu')
+          const bindingPackageVersion = require('faceliveness-linux-arm64-gnu/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -332,13 +332,13 @@ function requireNative() {
     } else if (process.arch === 'arm') {
       if (isMusl()) {
         try {
-          return require('./liveness_node.linux-arm-musleabihf.node')
+          return require('./faceliveness.linux-arm-musleabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-arm-musleabihf')
-          const bindingPackageVersion = require('liveness_node-linux-arm-musleabihf/package.json').version
+          const binding = require('faceliveness-linux-arm-musleabihf')
+          const bindingPackageVersion = require('faceliveness-linux-arm-musleabihf/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -348,13 +348,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./liveness_node.linux-arm-gnueabihf.node')
+          return require('./faceliveness.linux-arm-gnueabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-arm-gnueabihf')
-          const bindingPackageVersion = require('liveness_node-linux-arm-gnueabihf/package.json').version
+          const binding = require('faceliveness-linux-arm-gnueabihf')
+          const bindingPackageVersion = require('faceliveness-linux-arm-gnueabihf/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -366,13 +366,13 @@ function requireNative() {
     } else if (process.arch === 'loong64') {
       if (isMusl()) {
         try {
-          return require('./liveness_node.linux-loong64-musl.node')
+          return require('./faceliveness.linux-loong64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-loong64-musl')
-          const bindingPackageVersion = require('liveness_node-linux-loong64-musl/package.json').version
+          const binding = require('faceliveness-linux-loong64-musl')
+          const bindingPackageVersion = require('faceliveness-linux-loong64-musl/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -382,13 +382,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./liveness_node.linux-loong64-gnu.node')
+          return require('./faceliveness.linux-loong64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-loong64-gnu')
-          const bindingPackageVersion = require('liveness_node-linux-loong64-gnu/package.json').version
+          const binding = require('faceliveness-linux-loong64-gnu')
+          const bindingPackageVersion = require('faceliveness-linux-loong64-gnu/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -400,13 +400,13 @@ function requireNative() {
     } else if (process.arch === 'riscv64') {
       if (isMusl()) {
         try {
-          return require('./liveness_node.linux-riscv64-musl.node')
+          return require('./faceliveness.linux-riscv64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-riscv64-musl')
-          const bindingPackageVersion = require('liveness_node-linux-riscv64-musl/package.json').version
+          const binding = require('faceliveness-linux-riscv64-musl')
+          const bindingPackageVersion = require('faceliveness-linux-riscv64-musl/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -416,13 +416,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./liveness_node.linux-riscv64-gnu.node')
+          return require('./faceliveness.linux-riscv64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('liveness_node-linux-riscv64-gnu')
-          const bindingPackageVersion = require('liveness_node-linux-riscv64-gnu/package.json').version
+          const binding = require('faceliveness-linux-riscv64-gnu')
+          const bindingPackageVersion = require('faceliveness-linux-riscv64-gnu/package.json').version
           if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -433,13 +433,13 @@ function requireNative() {
       }
     } else if (process.arch === 'ppc64') {
       try {
-        return require('./liveness_node.linux-ppc64-gnu.node')
+        return require('./faceliveness.linux-ppc64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-linux-ppc64-gnu')
-        const bindingPackageVersion = require('liveness_node-linux-ppc64-gnu/package.json').version
+        const binding = require('faceliveness-linux-ppc64-gnu')
+        const bindingPackageVersion = require('faceliveness-linux-ppc64-gnu/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -449,13 +449,13 @@ function requireNative() {
       }
     } else if (process.arch === 's390x') {
       try {
-        return require('./liveness_node.linux-s390x-gnu.node')
+        return require('./faceliveness.linux-s390x-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-linux-s390x-gnu')
-        const bindingPackageVersion = require('liveness_node-linux-s390x-gnu/package.json').version
+        const binding = require('faceliveness-linux-s390x-gnu')
+        const bindingPackageVersion = require('faceliveness-linux-s390x-gnu/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -469,13 +469,13 @@ function requireNative() {
   } else if (process.platform === 'openharmony') {
     if (process.arch === 'arm64') {
       try {
-        return require('./liveness_node.openharmony-arm64.node')
+        return require('./faceliveness.openharmony-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-openharmony-arm64')
-        const bindingPackageVersion = require('liveness_node-openharmony-arm64/package.json').version
+        const binding = require('faceliveness-openharmony-arm64')
+        const bindingPackageVersion = require('faceliveness-openharmony-arm64/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -485,13 +485,13 @@ function requireNative() {
       }
     } else if (process.arch === 'x64') {
       try {
-        return require('./liveness_node.openharmony-x64.node')
+        return require('./faceliveness.openharmony-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-openharmony-x64')
-        const bindingPackageVersion = require('liveness_node-openharmony-x64/package.json').version
+        const binding = require('faceliveness-openharmony-x64')
+        const bindingPackageVersion = require('faceliveness-openharmony-x64/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -501,13 +501,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./liveness_node.openharmony-arm.node')
+        return require('./faceliveness.openharmony-arm.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('liveness_node-openharmony-arm')
-        const bindingPackageVersion = require('liveness_node-openharmony-arm/package.json').version
+        const binding = require('faceliveness-openharmony-arm')
+        const bindingPackageVersion = require('faceliveness-openharmony-arm/package.json').version
         if (bindingPackageVersion !== '0.1.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -623,10 +623,10 @@ if (!nativeBinding || forceWasi) {
     let candidateError = null
     let candidateFailed = false
     try {
-      candidateError = __napiWasiResolveCandidate('./liveness_node.wasi.cjs', false, ["./liveness_node.wasm32-wasi.debug.wasm","./liveness_node.wasm32-wasi.wasm"])
+      candidateError = __napiWasiResolveCandidate('./faceliveness.wasi.cjs', false, ["./faceliveness.wasm32-wasi.debug.wasm","./faceliveness.wasm32-wasi.wasm"])
       candidateFailed = candidateError !== null
       if (!candidateFailed) {
-        wasiBinding = require('./liveness_node.wasi.cjs')
+        wasiBinding = require('./faceliveness.wasi.cjs')
         nativeBinding = wasiBinding
         wasiBindingLoaded = true
       }
@@ -643,16 +643,16 @@ if (!nativeBinding || forceWasi) {
     let candidateError = null
     let candidateFailed = false
     try {
-      candidateError = __napiWasiResolveCandidate('liveness_node-wasm32-wasi', true, undefined)
+      candidateError = __napiWasiResolveCandidate('faceliveness-wasm32-wasi', true, undefined)
       candidateFailed = candidateError !== null
       if (!candidateFailed) {
         if (process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
-          const bindingPackageVersion = require('liveness_node-wasm32-wasi/package.json').version
+          const bindingPackageVersion = require('faceliveness-wasm32-wasi/package.json').version
           if (bindingPackageVersion !== '0.1.0') {
             throw new Error(`WASI binding package version mismatch, expected 0.1.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
         }
-        wasiBinding = require('liveness_node-wasm32-wasi')
+        wasiBinding = require('faceliveness-wasm32-wasi')
         nativeBinding = wasiBinding
         wasiBindingLoaded = true
       }
@@ -700,4 +700,6 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.Engine = nativeBinding.Engine
+module.exports.Session = nativeBinding.Session
 module.exports.version = nativeBinding.version

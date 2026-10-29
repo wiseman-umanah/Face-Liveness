@@ -129,6 +129,10 @@ fn pixel(frame: &Frame, x: usize, y: usize) -> [f32; 3] {
             let i = y * stride + x * 3;
             [d[i] as f32, d[i + 1] as f32, d[i + 2] as f32]
         }
+        PixelFormat::Bgr8 => {
+            let i = y * stride + x * 3;
+            [d[i + 2] as f32, d[i + 1] as f32, d[i] as f32]
+        }
         PixelFormat::Rgba8 => {
             let i = y * stride + x * 4;
             [d[i] as f32, d[i + 1] as f32, d[i + 2] as f32]

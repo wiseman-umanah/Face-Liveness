@@ -147,11 +147,13 @@ fn all_pixel_formats_agree() {
 
     let rgba: Vec<u8> = img.pixels().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
     let bgra: Vec<u8> = img.pixels().flat_map(|p| [p[2], p[1], p[0], 255]).collect();
+    let bgr: Vec<u8> = img.pixels().flat_map(|p| [p[2], p[1], p[0]]).collect();
     let nv21 = to_nv21(&img);
     let cases = [
         // NV21 loses chroma detail, hence the looser limit (measured 0.04 px).
         (rgba.as_slice(), PixelFormat::Rgba8, w * 4, 0.01),
         (&bgra, PixelFormat::Bgra8, w * 4, 0.01),
+        (&bgr, PixelFormat::Bgr8, w * 3, 0.01),
         (&nv21, PixelFormat::Nv21, w, 0.15),
     ];
     for (data, format, stride, tolerance) in cases {

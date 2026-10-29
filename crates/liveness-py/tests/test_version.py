@@ -1,7 +1,7 @@
 from importlib.metadata import version as dist_version
 
-import liveness_py
+import faceliveness
 
 
 def test_version_matches_package():
-    assert liveness_py.version() == dist_version("liveness-py")
+    assert faceliveness.version() == dist_version("faceliveness")

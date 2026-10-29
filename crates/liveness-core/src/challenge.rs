@@ -9,12 +9,37 @@ pub enum Challenge {
 }
 
 impl Challenge {
+    /// Snake-case name used by the language bindings.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Challenge::Blink => "blink",
+            Challenge::TurnLeft => "turn_left",
+            Challenge::TurnRight => "turn_right",
+            Challenge::OpenMouth => "open_mouth",
+        }
+    }
+
     pub const ALL: [Challenge; 4] = [
         Challenge::Blink,
         Challenge::TurnLeft,
         Challenge::TurnRight,
         Challenge::OpenMouth,
     ];
+}
+
+impl std::str::FromStr for Challenge {
+    type Err = LivenessError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|c| c.as_str() == s)
+            .ok_or_else(|| {
+                LivenessError::InvalidConfig(format!(
+                    "unknown challenge {s:?}; expected blink, turn_left, turn_right or open_mouth"
+                ))
+            })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +62,18 @@ pub enum FailReason {
     FaceLost,
     /// More than one face was visible for longer than `multiple_faces_ms`.
     MultipleFaces,
+}
+
+impl FailReason {
+    /// Snake-case name used by the language bindings.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FailReason::Timeout => "timeout",
+            FailReason::StepTimeout => "step_timeout",
+            FailReason::FaceLost => "face_lost",
+            FailReason::MultipleFaces => "multiple_faces",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,6 +278,14 @@ mod tests {
         let mut s = session(vec![Challenge::Blink]);
         assert_eq!(s.update(0, &[Challenge::Blink]), Status::Passed);
         assert_eq!(s.fail(FailReason::FaceLost), Status::Passed);
+    }
+
+    #[test]
+    fn challenge_names_round_trip() {
+        for c in Challenge::ALL {
+            assert_eq!(c.as_str().parse::<Challenge>().unwrap(), c);
+        }
+        assert!("smile".parse::<Challenge>().is_err());
     }
 
     #[test]

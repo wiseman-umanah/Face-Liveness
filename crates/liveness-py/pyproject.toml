@@ -1,8 +1,15 @@
 [project]
-name = "liveness-py"
+name = "faceliveness"
 version = "0.1.0"
-description = "Python bindings for the face-liveness Rust core"
+description = "On-device face liveness checks (blink, head turn, mouth open) powered by a Rust core"
 readme = "README.md"
+keywords = ["face", "liveness", "anti-spoofing", "biometrics", "kyc"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
 license = "Apache-2.0"
 authors = [
     { name = "wiseman-umanah", email = "wisemanumanah@gmail.com" }
@@ -10,18 +17,22 @@ authors = [
 requires-python = ">=3.9"
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/wiseman-umanah/Face-Liveness"
+
 [dependency-groups]
-dev = ["maturin>=1.15,<2.0", "pytest>=8"]
+dev = ["maturin>=1.15,<2.0", "pytest>=8", "numpy>=1.21"]
 
 [build-system]
 requires = ["maturin>=1.15,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-module-name = "liveness_py._core"
+module-name = "faceliveness._core"
 python-source = "src"
 manifest-path = "Cargo.toml"
+exclude = ["**/__pycache__/**"]
 
 [tool.uv]
 # Rebuild the extension when Rust sources change
-cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "src/**/*.rs" }, { file = "../liveness-core/src/**/*.rs" }]
+cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "src/**/*.rs" }, { file = "../liveness-core/src/**/*.rs" }, { file = "../liveness-core/models/*.onnx" }]
