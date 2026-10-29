@@ -81,6 +81,23 @@ Run Clippy:
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
+### Replay a recording
+
+`crates/liveness-core/tests/fixtures/` holds recorded sessions (per-frame face measurements, no images). Replay one through the detectors:
+
+```bash
+cargo run -p liveness-core --release --example replay -- crates/liveness-core/tests/fixtures/session_01.csv
+```
+
+This shows every detected blink, mouth-open and head turn, totals, and the cost per frame. Add `--sweep` for blink counts across thresholds, or run a liveness session against the recording:
+
+```bash
+cargo run -p liveness-core --release --example replay -- \
+  crates/liveness-core/tests/fixtures/session_03.csv --challenges left,right,mouth --from 25
+```
+
+Record your own with `prototype/probe.py my_session.csv` (needs `opencv-python` and `mediapipe`).
+
 ### Node.js bindings
 
 Navigate to the Node.js crate:

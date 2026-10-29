@@ -7,7 +7,7 @@ edition = "2024"
 version = "0.1.0"
 license = "Apache-2.0"
 repository = "https://github.com/wiseman-umanah/Face-Liveness"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [workspace.dependencies]
 liveness-core = { path = "crates/liveness-core" }

@@ -45,5 +45,4 @@ Thumbs.db
 # Native extension build outputs
 *.so
 *.pyd
-prototype
 liveness_plan.md
