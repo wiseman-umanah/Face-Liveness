@@ -1,11 +1,16 @@
 [package]
 name = "liveness-py"
-version = "0.1.0"
-edition = "2024"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
 
 [lib]
+name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.30", features = ["extension-module"] }
-liveness-core = { path = "../liveness-core" }
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py39"] }
+liveness-core.workspace = true

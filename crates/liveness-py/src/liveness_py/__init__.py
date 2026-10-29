@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from liveness-py!")
+from liveness_py._core import version
+
+__all__ = ["version"]

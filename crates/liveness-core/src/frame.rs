@@ -34,10 +34,18 @@ impl Frame<'_> {
         if self.width == 0 || self.height == 0 {
             return Err(LivenessError::InvalidFrame("zero size".into()));
         }
-        let (w, h, s) = (self.width as usize, self.height as usize, self.stride as usize);
+        let (w, h, s) = (
+            self.width as usize,
+            self.height as usize,
+            self.stride as usize,
+        );
         let needed = match self.format {
             PixelFormat::Rgb8 | PixelFormat::Rgba8 | PixelFormat::Bgra8 => {
-                let bpp = if self.format == PixelFormat::Rgb8 { 3 } else { 4 };
+                let bpp = if self.format == PixelFormat::Rgb8 {
+                    3
+                } else {
+                    4
+                };
                 if s < w * bpp {
                     return Err(LivenessError::InvalidFrame("stride too small".into()));
                 }

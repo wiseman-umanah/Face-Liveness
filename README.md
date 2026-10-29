@@ -89,39 +89,37 @@ Navigate to the Node.js crate:
 cd crates/liveness-node
 ```
 
-Install JavaScript dependencies:
+Install dependencies, build the native addon and run the tests:
 
 ```bash
 pnpm install
-```
-
-Build the native addon using the build script defined in `package.json`.
-
-If the package defines a `build` script, run:
-
-```bash
 pnpm build
+pnpm test
 ```
 
-The package's generated JavaScript entry point and native addon must be available before you can import the module.
-
-For the current version function, the API is intended to be callable as follows:
+Then, from the same directory:
 
 ```javascript
-const { liveness_node } = require("./");
+const { version } = require("./");
 
-console.log(liveness_node());
+console.log(version());
 ```
-
-Run this example from the Node.js package directory after building the addon.
 
 ### Python bindings
 
-The Python bindings live in `crates/liveness-py`.
+The Python bindings live in `crates/liveness-py` and support Python 3.9+.
 
-Python installation and build instructions will be documented here as the Python API and packaging configuration are finalized.
+```bash
+cd crates/liveness-py
+uv sync          # builds the extension with maturin
+uv run pytest
+```
 
-For development, use the project's `pyproject.toml` and `uv.lock` to manage its Python environment and dependencies.
+```python
+import liveness_py
+
+print(liveness_py.version())
+```
 
 ## Development
 
@@ -155,4 +153,4 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## License
 
-The project license will be documented here once the repository-wide licensing decision is finalized.
+Licensed under the [Apache License 2.0](LICENSE).

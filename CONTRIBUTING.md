@@ -50,7 +50,12 @@ cd crates/liveness-node
 pnpm install
 ```
 
-For the Python package, use the `pyproject.toml` and `uv.lock` in `crates/liveness-py` to set up the environment and dependencies.
+For the Python package:
+
+```bash
+cd crates/liveness-py
+uv sync
+```
 
 ## 3. Making Changes
 
@@ -111,7 +116,11 @@ Run the scripts that apply to your changes.
 
 ### Python
 
-Run the relevant build and test commands for `liveness-py`. Ensure that Python binding changes remain compatible with the configured PyO3 and Maturin versions.
+```bash
+cd crates/liveness-py
+uv sync
+uv run pytest
+```
 
 Do not claim that a check passes unless you have run it successfully.
 
@@ -176,6 +185,4 @@ Any future face-liveness functionality should be evaluated carefully before bein
 
 ## 9. License
 
-By submitting a contribution, you agree that it may be distributed under the project's applicable license.
-
-Please confirm the repository's licensing terms before contributing.
+By submitting a contribution, you agree that it will be licensed under the [Apache License 2.0](LICENSE).

@@ -1,10 +1,11 @@
 [package]
 name = "liveness-core"
-version = "0.1.0"
-edition = "2024"
+description = "Core face-liveness logic shared by the Python and Node.js bindings"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-image = "0.25.10"
-ndarray = "0.17.2"
-ort = "2.0.0-rc.15"
 thiserror = "2.0.21"

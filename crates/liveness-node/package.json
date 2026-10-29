@@ -1,21 +1,21 @@
 {
   "name": "liveness_node",
-  "version": "1.1.1",
-  "description": "Template project for writing node package with napi-rs",
+  "version": "0.1.0",
+  "description": "Node.js bindings for the face-liveness Rust core",
   "main": "index.js",
   "types": "index.d.ts",
   "repository": {
-    "url": "git+ssh://git@github.com/napi-rs/package-template-pnpm.git",
-    "type": "git"
+    "type": "git",
+    "url": "git+https://github.com/wiseman-umanah/Face-Liveness.git",
+    "directory": "crates/liveness-node"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
+    "face-liveness",
+    "liveness-detection",
+    "anti-spoofing",
     "napi-rs",
-    "NAPI",
-    "N-API",
-    "Rust",
-    "node-addon",
-    "node-addon-api"
+    "rust"
   ],
   "files": [
     "index.d.ts",

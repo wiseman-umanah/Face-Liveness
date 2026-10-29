@@ -41,3 +41,9 @@ Thumbs.db
 *.tmp
 *.swp
 *.bak
+
+# Native extension build outputs
+*.so
+*.pyd
+prototype
+liveness_plan.md

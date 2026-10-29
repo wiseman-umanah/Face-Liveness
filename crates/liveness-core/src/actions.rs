@@ -29,7 +29,12 @@ pub struct BlinkDetector {
 impl BlinkDetector {
     pub fn new() -> Self {
         // 0.2 is a placeholder; real thresholds vary per person and camera
-        Self { closed_since: None, threshold: 0.2, min_ms: 50, max_ms: 600 }
+        Self {
+            closed_since: None,
+            threshold: 0.2,
+            min_ms: 50,
+            max_ms: 600,
+        }
     }
 
     /// Returns true on the frame where a complete blink is detected.

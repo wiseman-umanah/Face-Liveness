@@ -1,23 +1,27 @@
 [project]
 name = "liveness-py"
 version = "0.1.0"
-description = "Add your description here"
+description = "Python bindings for the face-liveness Rust core"
 readme = "README.md"
+license = "Apache-2.0"
 authors = [
     { name = "wiseman-umanah", email = "wisemanumanah@gmail.com" }
 ]
-requires-python = ">=3.15"
-dependencies = [
-    "maturin>=1.15.0",
-]
+requires-python = ">=3.9"
+dependencies = []
 
-[project.scripts]
-liveness-py = "liveness_py:main"
+[dependency-groups]
+dev = ["maturin>=1.15,<2.0", "pytest>=8"]
 
 [build-system]
 requires = ["maturin>=1.15,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-module-name = "liveness_py"
+module-name = "liveness_py._core"
+python-source = "src"
 manifest-path = "Cargo.toml"
+
+[tool.uv]
+# Rebuild the extension when Rust sources change
+cache-keys = [{ file = "pyproject.toml" }, { file = "Cargo.toml" }, { file = "src/**/*.rs" }, { file = "../liveness-core/src/**/*.rs" }]

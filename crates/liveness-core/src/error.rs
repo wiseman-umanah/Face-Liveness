@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum LivenessError {
     #[error("invalid frame: {0}")]
     InvalidFrame(String),
+    #[error("invalid config: {0}")]
+    InvalidConfig(String),
     #[error("model error: {0}")]
     Model(String),
 }

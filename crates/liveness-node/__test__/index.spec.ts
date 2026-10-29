@@ -1,8 +1,11 @@
+import { createRequire } from 'node:module'
+
 import test from 'ava'
 
-import { plus100 } from '../index.js'
+import { version } from '../index.js'
 
-test('sync function from native code', (t) => {
-  const fixture = 42
-  t.is(plus100(fixture), fixture + 100)
+const pkg = createRequire(import.meta.url)('../package.json')
+
+test('version matches the package version', (t) => {
+  t.is(version(), pkg.version)
 })

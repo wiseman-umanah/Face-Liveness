@@ -1,3 +1,5 @@
+use crate::error::{LivenessError, Result};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Challenge {
     Blink,
@@ -8,7 +10,10 @@ pub enum Challenge {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
-    InProgress { current: Challenge, remaining: usize },
+    InProgress {
+        current: Challenge,
+        remaining: usize,
+    },
     Passed,
     Failed(FailReason),
 }
@@ -26,8 +31,19 @@ pub struct ChallengeSession {
 }
 
 impl ChallengeSession {
-    pub fn new(challenges: Vec<Challenge>, timeout_ms: u64) -> Self {
-        Self { challenges, index: 0, started_at_ms: None, timeout_ms }
+    /// Fails on an empty challenge list, which would otherwise pass on the first frame.
+    pub fn new(challenges: Vec<Challenge>, timeout_ms: u64) -> Result<Self> {
+        if challenges.is_empty() {
+            return Err(LivenessError::InvalidConfig(
+                "challenge list is empty".into(),
+            ));
+        }
+        Ok(Self {
+            challenges,
+            index: 0,
+            started_at_ms: None,
+            timeout_ms,
+        })
     }
 
     /// Call once per frame with whatever actions were detected in that frame.
@@ -59,21 +75,36 @@ mod tests {
 
     #[test]
     fn passes_when_completed_in_order() {
-        let mut s = ChallengeSession::new(vec![Challenge::Blink, Challenge::TurnLeft], 10_000);
+        let mut s =
+            ChallengeSession::new(vec![Challenge::Blink, Challenge::TurnLeft], 10_000).unwrap();
         assert!(matches!(s.update(0, &[]), Status::InProgress { .. }));
-        assert!(matches!(s.update(100, &[Challenge::Blink]), Status::InProgress { .. }));
+        assert!(matches!(
+            s.update(100, &[Challenge::Blink]),
+            Status::InProgress { .. }
+        ));
         assert_eq!(s.update(200, &[Challenge::TurnLeft]), Status::Passed);
     }
 
     #[test]
     fn ignores_wrong_action() {
-        let mut s = ChallengeSession::new(vec![Challenge::Blink], 10_000);
-        assert!(matches!(s.update(0, &[Challenge::OpenMouth]), Status::InProgress { .. }));
+        let mut s = ChallengeSession::new(vec![Challenge::Blink], 10_000).unwrap();
+        assert!(matches!(
+            s.update(0, &[Challenge::OpenMouth]),
+            Status::InProgress { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_empty_challenge_list() {
+        assert!(matches!(
+            ChallengeSession::new(vec![], 10_000),
+            Err(LivenessError::InvalidConfig(_))
+        ));
     }
 
     #[test]
     fn times_out() {
-        let mut s = ChallengeSession::new(vec![Challenge::Blink], 1_000);
+        let mut s = ChallengeSession::new(vec![Challenge::Blink], 1_000).unwrap();
         s.update(0, &[]);
         assert_eq!(s.update(1_500, &[]), Status::Failed(FailReason::Timeout));
     }

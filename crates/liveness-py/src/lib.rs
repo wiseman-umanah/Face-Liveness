@@ -6,6 +6,6 @@ fn version() -> &'static str {
 }
 
 #[pymodule]
-fn liveness_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)
 }

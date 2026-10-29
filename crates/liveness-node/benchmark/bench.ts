@@ -1,19 +1,11 @@
 import { Bench } from 'tinybench'
 
-import { plus100 } from '../index.js'
-
-function add(a: number) {
-  return a + 100
-}
+import { version } from '../index.js'
 
 const bench = new Bench()
 
-bench.add('Native a + 100', () => {
-  plus100(10)
-})
-
-bench.add('JavaScript a + 100', () => {
-  add(10)
+bench.add('native version()', () => {
+  version()
 })
 
 await bench.run()
