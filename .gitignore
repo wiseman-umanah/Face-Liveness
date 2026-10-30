@@ -53,3 +53,6 @@ liveness_plan.md
 *.webm
 *.y4m
 recordings/
+# Local prototype data: recordings and the downloaded model bundle
+prototype/*.csv
+prototype/*.task
