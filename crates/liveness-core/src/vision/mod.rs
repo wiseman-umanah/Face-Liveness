@@ -2,6 +2,7 @@
 //! run with bundled ONNX models on pure-Rust inference (tract), so it builds anywhere
 //! Rust does, including WASM and mobile.
 
+mod antispoof;
 mod detector;
 mod engine;
 mod image;
@@ -28,6 +29,12 @@ pub struct AnalyzerConfig {
     pub min_detection_score: f32,
     /// Minimum landmark-model confidence that the crop still contains a face.
     pub min_presence: f32,
+    /// Run the passive anti-spoofing models on the primary face.
+    pub antispoof: bool,
+    /// Score every Nth frame that has a face (1 = every frame). The score is used as a
+    /// session mean, so sampling barely changes it; each run costs about a third of the
+    /// landmark pipeline.
+    pub antispoof_every: u32,
 }
 
 impl Default for AnalyzerConfig {
@@ -36,6 +43,8 @@ impl Default for AnalyzerConfig {
         Self {
             min_detection_score: 0.5,
             min_presence: 0.5,
+            antispoof: true,
+            antispoof_every: 3,
         }
     }
 }
@@ -59,6 +68,10 @@ pub struct FaceAnalysis {
     pub landmarks: Option<Vec<Point>>,
     /// Measurements of the primary face, for the action detectors.
     pub signals: Option<FaceSignals>,
+    /// Passive anti-spoofing: probability (0-1) that the primary face is a real face rather
+    /// than a photo or screen, on frames where it was measured (see
+    /// [`AnalyzerConfig::antispoof_every`]). Uncalibrated for your cameras; see `models/README.md`.
+    pub real_score: Option<f32>,
 }
 
 impl FaceAnalysis {
@@ -70,19 +83,24 @@ impl FaceAnalysis {
 
 type Model = Arc<TypedRunnableModel>;
 
-fn load(bytes: &[u8], input_size: usize) -> Result<Model> {
+/// NHWC input for a square RGB model of side `size`.
+fn nhwc(size: usize) -> [usize; 4] {
+    [1, size, size, 3]
+}
+
+fn load(bytes: &[u8], shape: [usize; 4]) -> Result<Model> {
     let model_err = |e: TractError| LivenessError::Model(e.to_string());
     tract_onnx::onnx()
         .model_for_read(&mut &*bytes)
-        .and_then(|m| m.with_input_fact(0, f32::fact([1, input_size, input_size, 3]).into()))
+        .and_then(|m| m.with_input_fact(0, f32::fact(shape).into()))
         .and_then(|m| m.into_optimized())
         .and_then(|m| m.into_runnable())
         .map_err(model_err)
 }
 
-fn run(model: &Model, input: Vec<f32>, size: usize) -> Result<TVec<TValue>> {
-    let tensor = Tensor::from_shape(&[1, size, size, 3], &input)
-        .map_err(|e| LivenessError::Model(e.to_string()))?;
+fn run(model: &Model, input: Vec<f32>, shape: [usize; 4]) -> Result<TVec<TValue>> {
+    let tensor =
+        Tensor::from_shape(&shape, &input).map_err(|e| LivenessError::Model(e.to_string()))?;
     model
         .run(tvec!(tensor.into()))
         .map_err(|e| LivenessError::Model(e.to_string()))
@@ -103,9 +121,13 @@ fn floats(value: &TValue) -> Result<&[f32]> {
 pub struct FaceAnalyzer {
     detector: Model,
     landmarker: Model,
+    /// MiniFASNet models paired with their crop scale; empty if anti-spoofing is off.
+    antispoof: Vec<(Model, f32)>,
     anchors: Vec<(f32, f32)>,
     config: AnalyzerConfig,
     tracked: Option<Roi>,
+    /// Frames with a face since the last reset, for `antispoof_every`.
+    faces_seen: u32,
 }
 
 impl FaceAnalyzer {
@@ -117,16 +139,27 @@ impl FaceAnalyzer {
     /// Uses models supplied as ONNX bytes (same inputs/outputs as the bundled ones).
     pub fn from_models(detector: &[u8], landmarks: &[u8], config: AnalyzerConfig) -> Result<Self> {
         Ok(Self {
-            detector: load(detector, detector::INPUT_SIZE)?,
-            landmarker: load(landmarks, landmarks::INPUT_SIZE)?,
+            detector: load(detector, nhwc(detector::INPUT_SIZE))?,
+            landmarker: load(landmarks, nhwc(landmarks::INPUT_SIZE))?,
+            antispoof: if config.antispoof {
+                let shape = [1, 3, antispoof::INPUT_SIZE, antispoof::INPUT_SIZE];
+                vec![
+                    (load(antispoof::MODEL_V2, shape)?, antispoof::SCALES[0]),
+                    (load(antispoof::MODEL_V1SE, shape)?, antispoof::SCALES[1]),
+                ]
+            } else {
+                vec![]
+            },
             anchors: detector::anchors(),
             config,
             tracked: None,
+            faces_seen: 0,
         })
     }
 
     pub fn reset(&mut self) {
         self.tracked = None;
+        self.faces_seen = 0;
     }
 
     pub fn analyze(&mut self, frame: &Frame) -> Result<FaceAnalysis> {
@@ -158,6 +191,10 @@ impl FaceAnalyzer {
             if let Some(points) = self.landmarks(&view, &roi)? {
                 self.tracked = Some(landmarks::roi_from_landmarks(&points));
                 analysis.signals = Some(landmarks::signals(&points));
+                if self.faces_seen % self.config.antispoof_every.max(1) == 0 {
+                    analysis.real_score = self.real_score(&view, &points)?;
+                }
+                self.faces_seen = self.faces_seen.wrapping_add(1);
                 analysis.landmarks = Some(points);
                 break;
             }
@@ -179,7 +216,7 @@ impl FaceAnalyzer {
         let out = run(
             &self.detector,
             view.crop(&input, size, (-1.0, 1.0), Border::Zero),
-            size,
+            nhwc(size),
         )?;
         let (regressors, scores) = match out.as_slice() {
             [a, b] if a.len() > b.len() => (floats(a)?, floats(b)?),
@@ -195,13 +232,29 @@ impl FaceAnalyzer {
         ))
     }
 
+    /// Mean "real face" probability over the anti-spoofing models, or None if they are off.
+    fn real_score(&self, view: &UprightView, points: &[Point]) -> Result<Option<f32>> {
+        if self.antispoof.is_empty() {
+            return Ok(None);
+        }
+        let face = antispoof::face_box(points);
+        let size = antispoof::INPUT_SIZE;
+        let mut total = 0.0;
+        for (model, scale) in &self.antispoof {
+            let bounds = antispoof::scaled_box(view.width, view.height, face, *scale);
+            let out = run(model, antispoof::input(view, bounds), [1, 3, size, size])?;
+            total += antispoof::real_probability(floats(&out[0])?);
+        }
+        Ok(Some(total / self.antispoof.len() as f32))
+    }
+
     /// Landmarks inside `roi`, or None if the model says there is no face there.
     fn landmarks(&self, view: &UprightView, roi: &Roi) -> Result<Option<Vec<Point>>> {
         let size = landmarks::INPUT_SIZE;
         let out = run(
             &self.landmarker,
             view.crop(roi, size, (0.0, 1.0), Border::Replicate),
-            size,
+            nhwc(size),
         )?;
         // Outputs: landmarks [1,1,1,1434], face-presence logit [1,1,1,1], and an unused [1,1].
         let mut points = None;

@@ -14,11 +14,13 @@
 //!   --size WxH            frame size (required; must match ffmpeg's output)
 //!   --fps N               timestamps = frame index / N (default 30; ignored with --live)
 //!   --live                timestamps from the wall clock (for cameras)
-//!   --csv out.csv         write ts_ms,ear,mouth,yaw per frame with a face (same as probe.py),
+//!   --csv out.csv         write ts_ms,ear,mouth,yaw,real_score per frame with a face
+//!                         (probe.py's columns plus the anti-spoofing score),
 //!                         replayable with the `replay` example
 //!   --challenges list     run a liveness session: blink,mouth,left,right
 //!   --random N            run a session of N random challenges instead
 //!   --mirrored            frames are mirrored (selfie view)
+//!   --min-real-score X    fail a completed session if the mean anti-spoofing score is below X
 
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
@@ -51,7 +53,7 @@ fn main() {
     let mut csv = value("--csv").map(|path| {
         let mut f =
             BufWriter::new(File::create(path).unwrap_or_else(|e| fail(&format!("{path}: {e}"))));
-        writeln!(f, "ts_ms,ear,mouth,yaw").unwrap();
+        writeln!(f, "ts_ms,ear,mouth,yaw,real_score").unwrap();
         f
     });
 
@@ -77,8 +79,15 @@ fn main() {
         }
         (None, None) => None,
     };
+    let min_real_score = value("--min-real-score").map(|v| {
+        v.parse::<f32>()
+            .unwrap_or_else(|_| fail("--min-real-score expects a number"))
+    });
     let session_config = if challenges.is_some() {
-        LivenessConfig::default()
+        LivenessConfig {
+            min_real_score,
+            ..LivenessConfig::default()
+        }
     } else {
         // Measurement only: a session that never ends and never times out.
         let mut c = LivenessConfig::default();
@@ -104,6 +113,7 @@ fn main() {
     let mut stdin = std::io::stdin().lock();
     let started = Instant::now();
     let mut times: Vec<Duration> = vec![];
+    let mut real_scores: Vec<f32> = vec![];
     let (mut frames, mut with_face) = (0u64, 0u64);
     let mut last_prompt: Option<Challenge> = None;
     let mut outcome: Option<Status> = None;
@@ -131,10 +141,18 @@ fn main() {
             .unwrap_or_else(|e| fail(&e.to_string()));
         times.push(t.elapsed());
 
+        let real = result.analysis.real_score;
+        real_scores.extend(real);
         if let Some(s) = result.analysis.signals {
             with_face += 1;
             if let Some(f) = csv.as_mut() {
-                writeln!(f, "{timestamp_ms},{:.3},{:.3},{:.3}", s.ear, s.mouth, s.yaw).unwrap();
+                let real = real.map_or(String::new(), |r| format!("{r:.4}"));
+                writeln!(
+                    f,
+                    "{timestamp_ms},{:.3},{:.3},{:.3},{real}",
+                    s.ear, s.mouth, s.yaw
+                )
+                .unwrap();
             }
         }
         for a in &result.actions {
@@ -144,10 +162,16 @@ fn main() {
             let face = match (result.analysis.face_count(), result.analysis.signals) {
                 (0, _) => "no face".to_string(),
                 (n, _) if n > 1 => format!("{n} faces"),
-                (_, Some(s)) => format!("EAR {:.2}  mouth {:.2}  yaw {:.2}", s.ear, s.mouth, s.yaw),
+                (_, Some(s)) => format!(
+                    "EAR {:.2}  mouth {:.2}  yaw {:.2}  real {:.2}",
+                    s.ear,
+                    s.mouth,
+                    s.yaw,
+                    real.unwrap_or(f32::NAN)
+                ),
                 (_, None) => "face".to_string(),
             };
-            eprint!("\r{}  {face:<40}", clock(timestamp_ms));
+            eprint!("\r{}  {face:<52}", clock(timestamp_ms));
         }
         if challenges.is_some() {
             match result.status {
@@ -192,6 +216,17 @@ fn main() {
         ms(times[times.len() * 95 / 100]),
         1000.0 / mean
     );
+    if !real_scores.is_empty() {
+        let mut sorted = real_scores.clone();
+        sorted.sort_by(f32::total_cmp);
+        let mean = sorted.iter().sum::<f32>() / sorted.len() as f32;
+        eprintln!(
+            "anti-spoofing real score: mean {mean:.3}   p5 {:.3}   median {:.3}   p95 {:.3}",
+            sorted[sorted.len() * 5 / 100],
+            sorted[sorted.len() / 2],
+            sorted[sorted.len() * 95 / 100]
+        );
+    }
     if challenges.is_some() && outcome.is_none() {
         eprintln!("video ended before the session finished");
     }

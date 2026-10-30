@@ -1,6 +1,9 @@
 //! Native part of the `faceliveness` Python package. The Python layer in
 //! `src/faceliveness/__init__.py` turns NumPy arrays into the raw bytes these functions take.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use liveness_core::attest::{self, PublicKey};
 use liveness_core::challenge::{Challenge, Status};
 use liveness_core::error::LivenessError;
 use liveness_core::frame::{Frame, PixelFormat, Rotation};
@@ -25,8 +28,12 @@ fn config(
     total_timeout_ms: Option<u64>,
     step_timeout_ms: Option<u64>,
     face_lost_ms: Option<u64>,
+    min_real_score: Option<f32>,
 ) -> LivenessConfig {
-    let mut c = LivenessConfig::default();
+    let mut c = LivenessConfig {
+        min_real_score,
+        ..LivenessConfig::default()
+    };
     if let Some(v) = total_timeout_ms {
         c.session.total_timeout_ms = v;
     }
@@ -37,6 +44,25 @@ fn config(
         c.session.face_lost_ms = v;
     }
     c
+}
+
+/// `now` in Unix seconds, defaulting to the system clock.
+fn now_or_clock(now: Option<u64>) -> u64 {
+    now.unwrap_or_else(|| {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs())
+    })
+}
+
+fn key32(bytes: &[u8], what: &str) -> PyResult<[u8; 32]> {
+    bytes
+        .try_into()
+        .map_err(|_| PyValueError::new_err(format!("{what} must be 32 bytes, got {}", bytes.len())))
+}
+
+fn public_key(bytes: &[u8]) -> PyResult<PublicKey> {
+    PublicKey::from_bytes(&key32(bytes, "public key")?).map_err(to_py)
 }
 
 fn seed_or_random(seed: Option<u64>) -> PyResult<u64> {
@@ -110,7 +136,7 @@ struct FrameResult {
     current_challenge: Option<&'static str>,
     /// Challenges left including the current one, while in progress.
     remaining: usize,
-    /// "timeout", "step_timeout", "face_lost" or "multiple_faces", when failed.
+    /// "timeout", "step_timeout", "face_lost", "multiple_faces" or "spoof_suspected".
     fail_reason: Option<&'static str>,
     /// Actions recognised in this frame.
     actions: Vec<&'static str>,
@@ -119,6 +145,9 @@ struct FrameResult {
     faces: Vec<FaceBox>,
     /// 478 face-mesh landmarks (x, y) of the primary face, in upright pixels.
     landmarks: Option<Vec<(f32, f32)>>,
+    /// Passive anti-spoofing: probability (0-1) that the face is real rather than a photo or
+    /// screen. Measured on every 3rd frame with a face (None otherwise); uncalibrated.
+    real_score: Option<f32>,
 }
 
 #[pymethods]
@@ -166,6 +195,7 @@ impl FrameResult {
             signals: signals.map(Signals::from),
             faces: vec![],
             landmarks: None,
+            real_score: None,
         }
     }
 
@@ -184,6 +214,7 @@ impl FrameResult {
         self.landmarks = analysis
             .landmarks
             .map(|l| l.iter().map(|p| (p.x, p.y)).collect());
+        self.real_score = analysis.real_score;
         self
     }
 }
@@ -197,30 +228,84 @@ struct Engine {
 #[pymethods]
 impl Engine {
     #[new]
-    #[pyo3(signature = (challenges, *, total_timeout_ms=None, step_timeout_ms=None, face_lost_ms=None))]
+    #[pyo3(signature = (challenges, *, total_timeout_ms=None, step_timeout_ms=None, face_lost_ms=None, min_real_score=None))]
     fn new(
         challenges: Vec<String>,
         total_timeout_ms: Option<u64>,
         step_timeout_ms: Option<u64>,
         face_lost_ms: Option<u64>,
+        min_real_score: Option<f32>,
     ) -> PyResult<Self> {
-        let config = config(total_timeout_ms, step_timeout_ms, face_lost_ms);
+        let config = config(
+            total_timeout_ms,
+            step_timeout_ms,
+            face_lost_ms,
+            min_real_score,
+        );
         let inner = LivenessEngine::new(parse_challenges(challenges)?, config).map_err(to_py)?;
         Ok(Self { inner })
     }
 
     #[staticmethod]
-    #[pyo3(signature = (count, *, seed=None, total_timeout_ms=None, step_timeout_ms=None, face_lost_ms=None))]
+    #[pyo3(signature = (count, *, seed=None, total_timeout_ms=None, step_timeout_ms=None, face_lost_ms=None, min_real_score=None))]
     fn random(
         count: usize,
         seed: Option<u64>,
         total_timeout_ms: Option<u64>,
         step_timeout_ms: Option<u64>,
         face_lost_ms: Option<u64>,
+        min_real_score: Option<f32>,
     ) -> PyResult<Self> {
-        let config = config(total_timeout_ms, step_timeout_ms, face_lost_ms);
+        let config = config(
+            total_timeout_ms,
+            step_timeout_ms,
+            face_lost_ms,
+            min_real_score,
+        );
         let inner = LivenessEngine::random(count, seed_or_random(seed)?, config).map_err(to_py)?;
         Ok(Self { inner })
+    }
+
+    /// A session for a ticket issued by `SigningKey.issue_ticket`; raises if the ticket is
+    /// forged, for another key, or expired.
+    #[staticmethod]
+    #[pyo3(signature = (token, public_key, *, now=None, total_timeout_ms=None, step_timeout_ms=None, face_lost_ms=None, min_real_score=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn from_ticket(
+        token: &str,
+        public_key: &[u8],
+        now: Option<u64>,
+        total_timeout_ms: Option<u64>,
+        step_timeout_ms: Option<u64>,
+        face_lost_ms: Option<u64>,
+        min_real_score: Option<f32>,
+    ) -> PyResult<Self> {
+        let ticket = self::public_key(public_key)?
+            .verify_ticket(token, now_or_clock(now))
+            .map_err(to_py)?;
+        let config = config(
+            total_timeout_ms,
+            step_timeout_ms,
+            face_lost_ms,
+            min_real_score,
+        );
+        let inner = LivenessEngine::from_ticket(ticket, config).map_err(to_py)?;
+        Ok(Self { inner })
+    }
+
+    /// Signed receipt (JWT) for a finished ticketed session.
+    #[pyo3(signature = (signing_key, *, ttl_secs=300, now=None))]
+    fn receipt(
+        &self,
+        signing_key: &SigningKey,
+        ttl_secs: u64,
+        now: Option<u64>,
+    ) -> PyResult<String> {
+        let receipt = self
+            .inner
+            .receipt(now_or_clock(now), ttl_secs)
+            .map_err(to_py)?;
+        signing_key.inner.sign_receipt(&receipt).map_err(to_py)
     }
 
     #[getter]
@@ -282,7 +367,7 @@ impl Session {
         step_timeout_ms: Option<u64>,
         face_lost_ms: Option<u64>,
     ) -> PyResult<Self> {
-        let config = config(total_timeout_ms, step_timeout_ms, face_lost_ms);
+        let config = config(total_timeout_ms, step_timeout_ms, face_lost_ms, None);
         let inner = LivenessSession::new(parse_challenges(challenges)?, config).map_err(to_py)?;
         Ok(Self { inner })
     }
@@ -297,7 +382,7 @@ impl Session {
         step_timeout_ms: Option<u64>,
         face_lost_ms: Option<u64>,
     ) -> PyResult<Self> {
-        let config = config(total_timeout_ms, step_timeout_ms, face_lost_ms);
+        let config = config(total_timeout_ms, step_timeout_ms, face_lost_ms, None);
         let inner = LivenessSession::random(count, seed_or_random(seed)?, config).map_err(to_py)?;
         Ok(Self { inner })
     }
@@ -331,6 +416,138 @@ impl Session {
     }
 }
 
+/// Ed25519 key for issuing tickets and signing receipts. Keep it on your server.
+#[pyclass(module = "faceliveness")]
+struct SigningKey {
+    inner: attest::SigningKey,
+}
+
+#[pymethods]
+impl SigningKey {
+    /// A new random key.
+    #[staticmethod]
+    fn generate() -> PyResult<Self> {
+        Ok(Self {
+            inner: attest::SigningKey::generate().map_err(to_py)?,
+        })
+    }
+
+    /// Loads a key saved with `to_bytes()` (32 bytes).
+    #[staticmethod]
+    fn from_bytes(secret: &[u8]) -> PyResult<Self> {
+        Ok(Self {
+            inner: attest::SigningKey::from_bytes(&key32(secret, "signing key")?),
+        })
+    }
+
+    /// The 32-byte secret: store it like a password.
+    fn to_bytes(&self) -> Vec<u8> {
+        self.inner.to_bytes().to_vec()
+    }
+
+    /// The 32-byte public key, for verifying tickets and receipts.
+    #[getter]
+    fn public_key(&self) -> Vec<u8> {
+        self.inner.public_key().to_bytes().to_vec()
+    }
+
+    /// A signed ticket (JWT) for `challenges`, or for `count` random ones if not given.
+    #[pyo3(signature = (challenges=None, *, count=3, ttl_secs=120, now=None))]
+    fn issue_ticket(
+        &self,
+        challenges: Option<Vec<String>>,
+        count: usize,
+        ttl_secs: u64,
+        now: Option<u64>,
+    ) -> PyResult<String> {
+        let now = now_or_clock(now);
+        let issued = match challenges {
+            Some(names) => self
+                .inner
+                .issue_ticket(parse_challenges(names)?, now, ttl_secs),
+            None => self.inner.issue_random_ticket(count, now, ttl_secs),
+        };
+        Ok(issued.map_err(to_py)?.1)
+    }
+
+    fn __repr__(&self) -> &'static str {
+        "SigningKey(<secret>)"
+    }
+}
+
+/// A verified challenge ticket.
+#[pyclass(frozen, get_all, module = "faceliveness")]
+struct Ticket {
+    nonce: String,
+    challenges: Vec<&'static str>,
+    issued_at: u64,
+    expires_at: u64,
+}
+
+/// A verified liveness receipt.
+#[pyclass(frozen, get_all, module = "faceliveness")]
+struct Receipt {
+    /// The ticket's nonce: accept each nonce only once.
+    nonce: String,
+    challenges: Vec<&'static str>,
+    passed: bool,
+    fail_reason: Option<&'static str>,
+    frames: u32,
+    frames_sha256: String,
+    real_score: Option<f32>,
+    issued_at: u64,
+    expires_at: u64,
+}
+
+#[pymethods]
+impl Receipt {
+    fn __repr__(&self) -> String {
+        format!(
+            "Receipt(passed={}, fail_reason={:?}, nonce={:?}, frames={})",
+            self.passed, self.fail_reason, self.nonce, self.frames
+        )
+    }
+}
+
+fn names(challenges: &[Challenge]) -> Vec<&'static str> {
+    challenges.iter().map(|c| c.as_str()).collect()
+}
+
+/// Checks a ticket's signature and expiry; raises ValueError if invalid.
+#[pyfunction]
+#[pyo3(signature = (token, public_key, *, now=None))]
+fn verify_ticket(token: &str, public_key: &[u8], now: Option<u64>) -> PyResult<Ticket> {
+    let t = self::public_key(public_key)?
+        .verify_ticket(token, now_or_clock(now))
+        .map_err(to_py)?;
+    Ok(Ticket {
+        nonce: t.nonce,
+        challenges: names(&t.challenges),
+        issued_at: t.issued_at,
+        expires_at: t.expires_at,
+    })
+}
+
+/// Checks a receipt's signature and expiry; raises ValueError if invalid.
+#[pyfunction]
+#[pyo3(signature = (token, public_key, *, now=None))]
+fn verify_receipt(token: &str, public_key: &[u8], now: Option<u64>) -> PyResult<Receipt> {
+    let r = self::public_key(public_key)?
+        .verify_receipt(token, now_or_clock(now))
+        .map_err(to_py)?;
+    Ok(Receipt {
+        passed: r.passed(),
+        nonce: r.nonce,
+        challenges: names(&r.challenges),
+        fail_reason: r.fail_reason.map(|f| f.as_str()),
+        frames: r.frames,
+        frames_sha256: r.frames_sha256,
+        real_score: r.real_score,
+        issued_at: r.issued_at,
+        expires_at: r.expires_at,
+    })
+}
+
 #[pyfunction]
 fn version() -> &'static str {
     liveness_core::version()
@@ -344,5 +561,10 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FrameResult>()?;
     m.add_class::<Signals>()?;
     m.add_class::<FaceBox>()?;
+    m.add_class::<SigningKey>()?;
+    m.add_class::<Ticket>()?;
+    m.add_class::<Receipt>()?;
+    m.add_function(wrap_pyfunction!(verify_ticket, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_receipt, m)?)?;
     Ok(())
 }

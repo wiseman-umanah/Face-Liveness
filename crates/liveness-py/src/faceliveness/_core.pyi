@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 _Status = Literal["in_progress", "passed", "failed"]
 _Challenge = Literal["blink", "turn_left", "turn_right", "open_mouth"]
-_FailReason = Literal["timeout", "step_timeout", "face_lost", "multiple_faces"]
+_FailReason = Literal["timeout", "step_timeout", "face_lost", "multiple_faces", "spoof_suspected"]
 
 def version() -> str: ...
 
@@ -61,6 +61,11 @@ class FrameResult:
     @property
     def landmarks(self) -> Optional[list[tuple[float, float]]]:
         """478 face-mesh landmarks of the primary face, in upright pixels."""
+    @property
+    def real_score(self) -> Optional[float]:
+        """Passive anti-spoofing: probability (0-1) that the face is real rather than a photo
+        or screen. Measured on every 3rd frame with a face (None otherwise); uncalibrated for
+        your cameras."""
 
 class Engine:
     def __init__(
@@ -70,6 +75,7 @@ class Engine:
         total_timeout_ms: Optional[int] = None,
         step_timeout_ms: Optional[int] = None,
         face_lost_ms: Optional[int] = None,
+        min_real_score: Optional[float] = None,
     ) -> None: ...
     @staticmethod
     def random(
@@ -79,7 +85,20 @@ class Engine:
         total_timeout_ms: Optional[int] = None,
         step_timeout_ms: Optional[int] = None,
         face_lost_ms: Optional[int] = None,
+        min_real_score: Optional[float] = None,
     ) -> Engine: ...
+    @staticmethod
+    def from_ticket(
+        token: str,
+        public_key: bytes,
+        *,
+        now: Optional[int] = None,
+        total_timeout_ms: Optional[int] = None,
+        step_timeout_ms: Optional[int] = None,
+        face_lost_ms: Optional[int] = None,
+        min_real_score: Optional[float] = None,
+    ) -> Engine: ...
+    def receipt(self, signing_key: SigningKey, *, ttl_secs: int = 300, now: Optional[int] = None) -> str: ...
     @property
     def challenges(self) -> list[_Challenge]: ...
     def process_raw(
@@ -125,3 +144,62 @@ class Session:
         mouth: Optional[float] = None,
         yaw: Optional[float] = None,
     ) -> FrameResult: ...
+
+class SigningKey:
+    """Ed25519 key for issuing tickets and signing receipts. Keep it on your server."""
+
+    @staticmethod
+    def generate() -> SigningKey: ...
+    @staticmethod
+    def from_bytes(secret: bytes) -> SigningKey: ...
+    def to_bytes(self) -> bytes:
+        """The 32-byte secret: store it like a password."""
+    @property
+    def public_key(self) -> bytes:
+        """The 32-byte public key, for verifying tickets and receipts."""
+    def issue_ticket(
+        self,
+        challenges: Optional[list[str]] = None,
+        *,
+        count: int = 3,
+        ttl_secs: int = 120,
+        now: Optional[int] = None,
+    ) -> str:
+        """A signed ticket (JWT) for `challenges`, or for `count` random ones if not given."""
+
+class Ticket:
+    @property
+    def nonce(self) -> str: ...
+    @property
+    def challenges(self) -> list[_Challenge]: ...
+    @property
+    def issued_at(self) -> int: ...
+    @property
+    def expires_at(self) -> int: ...
+
+class Receipt:
+    @property
+    def nonce(self) -> str:
+        """The ticket's nonce: accept each nonce only once."""
+    @property
+    def challenges(self) -> list[_Challenge]: ...
+    @property
+    def passed(self) -> bool: ...
+    @property
+    def fail_reason(self) -> Optional[_FailReason]: ...
+    @property
+    def frames(self) -> int: ...
+    @property
+    def frames_sha256(self) -> str: ...
+    @property
+    def real_score(self) -> Optional[float]: ...
+    @property
+    def issued_at(self) -> int: ...
+    @property
+    def expires_at(self) -> int: ...
+
+def verify_ticket(token: str, public_key: bytes, *, now: Optional[int] = None) -> Ticket:
+    """Checks a ticket's signature and expiry; raises ValueError if invalid."""
+
+def verify_receipt(token: str, public_key: bytes, *, now: Optional[int] = None) -> Receipt:
+    """Checks a receipt's signature and expiry; raises ValueError if invalid."""

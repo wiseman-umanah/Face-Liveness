@@ -702,4 +702,7 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.Engine = nativeBinding.Engine
 module.exports.Session = nativeBinding.Session
+module.exports.SigningKey = nativeBinding.SigningKey
+module.exports.verifyReceipt = nativeBinding.verifyReceipt
+module.exports.verifyTicket = nativeBinding.verifyTicket
 module.exports.version = nativeBinding.version

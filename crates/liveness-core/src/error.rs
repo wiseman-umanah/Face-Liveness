@@ -6,6 +6,8 @@ pub enum LivenessError {
     InvalidFrame(String),
     #[error("invalid config: {0}")]
     InvalidConfig(String),
+    #[error("invalid token: {0}")]
+    InvalidToken(String),
     #[error("model error: {0}")]
     Model(String),
 }

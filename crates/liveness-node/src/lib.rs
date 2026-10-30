@@ -1,7 +1,9 @@
 #![deny(clippy::all)]
 
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use liveness_core::attest::{self, PublicKey};
 use liveness_core::challenge::{Challenge, Status};
 use liveness_core::error::LivenessError;
 use liveness_core::frame::{Frame, PixelFormat, Rotation};
@@ -26,6 +28,28 @@ fn non_negative(name: &str, v: i64) -> Result<u64> {
   u64::try_from(v).map_err(|_| invalid(format!("{name} must not be negative")))
 }
 
+/// `now` in Unix seconds, defaulting to the system clock.
+fn now_or_clock(now: Option<i64>) -> Result<u64> {
+  match now {
+    Some(v) => non_negative("now", v),
+    None => Ok(
+      SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs()),
+    ),
+  }
+}
+
+fn key32(bytes: &[u8], what: &str) -> Result<[u8; 32]> {
+  bytes
+    .try_into()
+    .map_err(|_| invalid(format!("{what} must be 32 bytes, got {}", bytes.len())))
+}
+
+fn public_key(bytes: &[u8]) -> Result<PublicKey> {
+  PublicKey::from_bytes(&key32(bytes, "public key")?).map_err(to_js)
+}
+
 #[napi(object)]
 #[derive(Default)]
 pub struct SessionOptions {
@@ -35,6 +59,12 @@ pub struct SessionOptions {
   pub step_timeout_ms: Option<i64>,
   /// Fail if the face is out of view longer than this (default 1000).
   pub face_lost_ms: Option<i64>,
+  /// If set, a session that completes its challenges still fails with 'spoof_suspected'
+  /// when the mean anti-spoofing score is below it. Off by default: calibrate on your own
+  /// cameras first (see `FrameResult.realScore`).
+  pub min_real_score: Option<f64>,
+  /// For `Engine.fromTicket`: current Unix time in seconds (default: the system clock).
+  pub now: Option<i64>,
   /// Only for `random`: fixes the challenge order. Leave unset in production so the
   /// order comes from the OS and can't be predicted (and pre-recorded).
   pub seed: Option<BigInt>,
@@ -42,7 +72,10 @@ pub struct SessionOptions {
 
 impl SessionOptions {
   fn config(&self) -> Result<LivenessConfig> {
-    let mut c = LivenessConfig::default();
+    let mut c = LivenessConfig {
+      min_real_score: self.min_real_score.map(|v| v as f32),
+      ..LivenessConfig::default()
+    };
     if let Some(v) = self.total_timeout_ms {
       c.session.total_timeout_ms = non_negative("totalTimeoutMs", v)?;
     }
@@ -189,6 +222,10 @@ pub struct FrameResult {
   /// 478 face-mesh landmarks [x, y] of the primary face, in upright pixels.
   #[napi(ts_type = "Array<[number, number]>")]
   pub landmarks: Option<Vec<Vec<f64>>>,
+  /// Passive anti-spoofing: probability (0-1) that the face is real rather than a photo or
+  /// screen. Measured on every 3rd frame with a face (absent otherwise); uncalibrated for
+  /// your cameras.
+  pub real_score: Option<f64>,
 }
 
 impl FrameResult {
@@ -216,6 +253,7 @@ impl FrameResult {
       signals: signals.map(Signals::from),
       faces: vec![],
       landmarks: None,
+      real_score: None,
     }
   }
 
@@ -242,6 +280,7 @@ impl FrameResult {
       .analysis
       .landmarks
       .map(|l| l.iter().map(|p| vec![p.x.into(), p.y.into()]).collect());
+    out.real_score = r.analysis.real_score.map(f64::from);
     out
   }
 }
@@ -290,6 +329,40 @@ impl Engine {
     let engine =
       LivenessEngine::random(count as usize, options.seed()?, options.config()?).map_err(to_js)?;
     Ok(Self::wrap(engine))
+  }
+
+  /// A session for a ticket from `SigningKey.issueTicket`. Throws if the ticket is forged,
+  /// signed by another key, or expired. Every frame is hashed into the receipt.
+  #[napi(factory)]
+  pub fn from_ticket(
+    token: String,
+    public_key: Uint8Array,
+    options: Option<SessionOptions>,
+  ) -> Result<Self> {
+    let options = options.unwrap_or_default();
+    let ticket = self::public_key(&public_key)?
+      .verify_ticket(&token, now_or_clock(options.now)?)
+      .map_err(to_js)?;
+    let engine = LivenessEngine::from_ticket(ticket, options.config()?).map_err(to_js)?;
+    Ok(Self::wrap(engine))
+  }
+
+  /// Signed receipt (JWT) for a finished ticketed session, for other services to check with
+  /// `verifyReceipt`. Throws if the session isn't finished or the ticket has expired.
+  #[napi]
+  pub fn receipt(
+    &self,
+    signing_key: &SigningKey,
+    options: Option<ReceiptOptions>,
+  ) -> Result<String> {
+    let options = options.unwrap_or_default();
+    let receipt = lock(&self.inner)?
+      .receipt(
+        now_or_clock(options.now)?,
+        non_negative("ttlSecs", options.ttl_secs.unwrap_or(300))?,
+      )
+      .map_err(to_js)?;
+    signing_key.inner.sign_receipt(&receipt).map_err(to_js)
   }
 
   fn wrap(engine: LivenessEngine) -> Self {
@@ -415,6 +488,141 @@ impl Session {
     );
     Ok(FrameResult::new(status, &actions, face_count, signals))
   }
+}
+
+#[napi(object)]
+#[derive(Default)]
+pub struct ReceiptOptions {
+  /// How long the receipt stays valid (default 300).
+  pub ttl_secs: Option<i64>,
+  /// Current Unix time in seconds (default: the system clock).
+  pub now: Option<i64>,
+}
+
+#[napi(object)]
+#[derive(Default)]
+pub struct TicketOptions {
+  /// Challenges to ask for; default: `count` random ones.
+  #[napi(ts_type = "Challenge[]")]
+  pub challenges: Option<Vec<String>>,
+  /// Number of random challenges when `challenges` is not given (default 3).
+  pub count: Option<u32>,
+  /// How long the ticket stays valid (default 120).
+  pub ttl_secs: Option<i64>,
+  /// Current Unix time in seconds (default: the system clock).
+  pub now: Option<i64>,
+}
+
+/// Ed25519 key for issuing tickets and signing receipts. Keep it on your server.
+#[napi]
+pub struct SigningKey {
+  inner: attest::SigningKey,
+}
+
+#[napi]
+impl SigningKey {
+  /// A new random key.
+  #[napi(factory)]
+  pub fn generate() -> Result<Self> {
+    Ok(Self {
+      inner: attest::SigningKey::generate().map_err(to_js)?,
+    })
+  }
+
+  /// Loads a key saved with `toBytes()` (32 bytes).
+  #[napi(factory)]
+  pub fn from_bytes(secret: Uint8Array) -> Result<Self> {
+    Ok(Self {
+      inner: attest::SigningKey::from_bytes(&key32(&secret, "signing key")?),
+    })
+  }
+
+  /// The 32-byte secret: store it like a password.
+  #[napi]
+  pub fn to_bytes(&self) -> Buffer {
+    self.inner.to_bytes().to_vec().into()
+  }
+
+  /// The 32-byte public key, for verifying tickets and receipts.
+  #[napi(getter)]
+  pub fn public_key(&self) -> Buffer {
+    self.inner.public_key().to_bytes().to_vec().into()
+  }
+
+  /// A signed ticket (JWT).
+  #[napi]
+  pub fn issue_ticket(&self, options: Option<TicketOptions>) -> Result<String> {
+    let o = options.unwrap_or_default();
+    let now = now_or_clock(o.now)?;
+    let ttl = non_negative("ttlSecs", o.ttl_secs.unwrap_or(120))?;
+    let issued = match o.challenges {
+      Some(names) => self.inner.issue_ticket(parse_challenges(&names)?, now, ttl),
+      None => self
+        .inner
+        .issue_random_ticket(o.count.unwrap_or(3) as usize, now, ttl),
+    };
+    Ok(issued.map_err(to_js)?.1)
+  }
+}
+
+/// A verified challenge ticket.
+#[napi(object)]
+pub struct Ticket {
+  pub nonce: String,
+  #[napi(ts_type = "Challenge[]")]
+  pub challenges: Vec<String>,
+  pub issued_at: i64,
+  pub expires_at: i64,
+}
+
+/// A verified liveness receipt.
+#[napi(object)]
+pub struct Receipt {
+  /// The ticket's nonce: accept each nonce only once.
+  pub nonce: String,
+  #[napi(ts_type = "Challenge[]")]
+  pub challenges: Vec<String>,
+  pub passed: bool,
+  #[napi(ts_type = "FailReason")]
+  pub fail_reason: Option<String>,
+  pub frames: u32,
+  pub frames_sha256: String,
+  pub real_score: Option<f64>,
+  pub issued_at: i64,
+  pub expires_at: i64,
+}
+
+/// Checks a ticket's signature and expiry; throws if invalid. `now` is Unix seconds.
+#[napi]
+pub fn verify_ticket(token: String, public_key: Uint8Array, now: Option<i64>) -> Result<Ticket> {
+  let t = self::public_key(&public_key)?
+    .verify_ticket(&token, now_or_clock(now)?)
+    .map_err(to_js)?;
+  Ok(Ticket {
+    nonce: t.nonce,
+    challenges: challenge_names(&t.challenges),
+    issued_at: t.issued_at as i64,
+    expires_at: t.expires_at as i64,
+  })
+}
+
+/// Checks a receipt's signature and expiry; throws if invalid. `now` is Unix seconds.
+#[napi]
+pub fn verify_receipt(token: String, public_key: Uint8Array, now: Option<i64>) -> Result<Receipt> {
+  let r = self::public_key(&public_key)?
+    .verify_receipt(&token, now_or_clock(now)?)
+    .map_err(to_js)?;
+  Ok(Receipt {
+    passed: r.passed(),
+    nonce: r.nonce,
+    challenges: challenge_names(&r.challenges),
+    fail_reason: r.fail_reason.map(|f| f.as_str().to_string()),
+    frames: r.frames,
+    frames_sha256: r.frames_sha256,
+    real_score: r.real_score.map(f64::from),
+    issued_at: r.issued_at as i64,
+    expires_at: r.expires_at as i64,
+  })
 }
 
 #[napi]

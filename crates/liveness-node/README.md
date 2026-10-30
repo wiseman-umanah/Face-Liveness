@@ -40,8 +40,9 @@ One liveness attempt. Challenges are `'blink' | 'turn_left' | 'turn_right' | 'op
 `Engine.random` picks them in an unpredictable order (from OS randomness), which is what you
 want in production so attempts can't be pre-recorded.
 
-Options: `totalTimeoutMs` (30000), `stepTimeoutMs` (10000), `faceLostMs` (1000), and `seed`
-(a `bigint`, for tests only).
+Options: `totalTimeoutMs` (30000), `stepTimeoutMs` (10000), `faceLostMs` (1000),
+`minRealScore` (fail a completed session whose mean `realScore` is below it; off by default,
+calibrate first) and `seed` (a `bigint`, for tests only).
 
 ### `engine.process(frame, options)` / `engine.processAsync(frame, options)`
 
@@ -58,23 +59,50 @@ Options: `totalTimeoutMs` (30000), `stepTimeoutMs` (10000), `faceLostMs` (1000),
 | `status` | `'in_progress'`, `'passed'` or `'failed'` |
 | `done` | `true` once passed or failed (it won't change after that) |
 | `currentChallenge`, `remaining` | what to ask the user for now, and how many are left |
-| `failReason` | `'timeout'`, `'step_timeout'`, `'face_lost'` or `'multiple_faces'` |
+| `failReason` | `'timeout'`, `'step_timeout'`, `'face_lost'`, `'multiple_faces'` or `'spoof_suspected'` |
 | `actions` | actions recognised in this frame |
 | `faceCount`, `faces` | faces in view and their boxes |
 | `signals` | `ear` (eye openness), `mouth` (mouth openness), `yaw` (head turn) |
 | `landmarks` | 478 face-mesh points `[x, y]` of the main face |
+| `realScore` | passive anti-spoofing: 0-1 probability the face is real, not a photo or screen (measured on every 3rd frame with a face, otherwise empty) |
 
 ### `new Session(challenges, options?)` and `session.update(timestampMs, { faceCount?, ear?, mouth?, yaw? })`
 
 The same challenge logic without image processing, for when you already compute face
 measurements yourself (for example with MediaPipe in the browser).
 
+## Server-side tickets and receipts
+
+A result computed on the user's device can't be trusted. Run the engine on your server and let
+other services check a signed receipt:
+
+```ts
+import { Engine, SigningKey, verifyReceipt } from 'faceliveness'
+
+const key = SigningKey.generate() // once; store key.toBytes() as a secret
+const ticket = key.issueTicket({ count: 3 }) // signed JWT: random challenges, 2 min expiry
+
+const engine = Engine.fromTicket(ticket, key.publicKey)
+// ... await engine.processAsync(frame, ...) for each frame the client streams, until done ...
+const receipt = engine.receipt(key) // signed JWT with the outcome and a frame hash
+
+// Any other service, with only the public key:
+const r = verifyReceipt(receipt, key.publicKey)
+if (r.passed && !alreadyUsed(r.nonce)) {
+  // accept each nonce once
+}
+```
+
+Tickets and receipts are standard Ed25519 (`EdDSA`) JWTs, so any JWT library can verify them.
+
 ## Security notes
 
-- Run the check where the user can't tamper with it (your server), or treat a client-side
-  result as untrusted.
-- Challenge-response liveness stops photos and replayed videos of the wrong actions. It does
-  not by itself stop a live deepfake or virtual-camera injection.
+- Challenge-response stops printed photos (they can't blink, and tilting one doesn't count as a
+  head turn) and makes pre-recorded video unlikely to match. It does not stop a live deepfake
+  or an injected virtual camera.
+- `realScore` is uncalibrated for your cameras, so it is only reported by default. Record
+  genuine and attack videos and run `tools/calibrate_spoof.py` before setting `minRealScore`.
+- Full details: [threat model](https://github.com/wiseman-umanah/Face-Liveness/blob/master/docs/threat-model.md).
 
 ## Develop
 

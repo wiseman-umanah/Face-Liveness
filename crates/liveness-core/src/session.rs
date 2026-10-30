@@ -11,6 +11,11 @@ pub struct LivenessConfig {
     pub blink: BlinkConfig,
     pub mouth: MouthConfig,
     pub turn: TurnConfig,
+    /// If set, a session that completes its challenges still fails with
+    /// [`FailReason::Spoof`] when the mean passive anti-spoofing score (see
+    /// [`record_real_score`](LivenessSession::record_real_score)) is below this, or was never
+    /// measured. Off by default: calibrate it on your own cameras first.
+    pub min_real_score: Option<f32>,
 }
 
 /// Runs the action detectors on every frame and feeds what they see into a
@@ -24,6 +29,10 @@ pub struct LivenessSession {
     turn: HeadTurnDetector,
     last_face_ms: Option<u64>,
     multiple_faces_since: Option<u64>,
+    min_real_score: Option<f32>,
+    real_score_sum: f64,
+    real_score_count: u32,
+    spoof_failed: bool,
 }
 
 impl LivenessSession {
@@ -51,7 +60,23 @@ impl LivenessSession {
             turn: HeadTurnDetector::new(config.turn),
             last_face_ms: None,
             multiple_faces_since: None,
+            min_real_score: config.min_real_score,
+            real_score_sum: 0.0,
+            real_score_count: 0,
+            spoof_failed: false,
         }
+    }
+
+    /// Adds one frame's passive anti-spoofing score (probability of a real face).
+    pub fn record_real_score(&mut self, score: f32) {
+        self.real_score_sum += f64::from(score);
+        self.real_score_count += 1;
+    }
+
+    /// Mean of the recorded anti-spoofing scores, if any.
+    pub fn mean_real_score(&self) -> Option<f32> {
+        (self.real_score_count > 0)
+            .then(|| (self.real_score_sum / f64::from(self.real_score_count)) as f32)
     }
 
     pub fn challenges(&self) -> &[Challenge] {
@@ -86,6 +111,9 @@ impl LivenessSession {
         face_count: usize,
         primary: Option<FaceSignals>,
     ) -> (Status, Vec<Challenge>) {
+        if self.spoof_failed {
+            return (Status::Failed(FailReason::Spoof), vec![]);
+        }
         // The face-lost clock only starts once a face has been seen; before that,
         // only the session timeouts apply.
         if let Some(last) = self.last_face_ms
@@ -119,7 +147,17 @@ impl LivenessSession {
                 detected.push(turn);
             }
         }
-        (self.challenges.update(now_ms, &detected), detected)
+        let status = self.challenges.update(now_ms, &detected);
+        if status == Status::Passed
+            && let Some(min) = self.min_real_score
+            && self.mean_real_score().is_none_or(|mean| mean < min)
+        {
+            self.spoof_failed = true;
+        }
+        if self.spoof_failed {
+            return (Status::Failed(FailReason::Spoof), detected);
+        }
+        (status, detected)
     }
 }
 
@@ -152,6 +190,43 @@ mod tests {
             t += 50;
         }
         assert_eq!(status, Status::Passed);
+    }
+
+    fn open_mouth_session(min_real_score: Option<f32>, scores: &[f32]) -> Status {
+        let config = LivenessConfig {
+            min_real_score,
+            ..LivenessConfig::default()
+        };
+        let mut s = LivenessSession::new(vec![Challenge::OpenMouth], config).unwrap();
+        scores.iter().for_each(|&x| s.record_real_score(x));
+        let mut t = 0;
+        let mut status = Status::Passed;
+        for mouth in [0.05; 5].into_iter().chain([0.6; 10]) {
+            status = s.update(t, &[FaceSignals { mouth, ..OPEN }]);
+            t += 50;
+        }
+        // Later frames keep the outcome.
+        assert_eq!(s.update(t, &[OPEN]), status);
+        status
+    }
+
+    #[test]
+    fn spoof_threshold_is_off_by_default() {
+        assert_eq!(open_mouth_session(None, &[0.1]), Status::Passed);
+    }
+
+    #[test]
+    fn low_real_score_fails_a_completed_session() {
+        assert_eq!(open_mouth_session(Some(0.5), &[0.9, 0.8]), Status::Passed);
+        assert_eq!(
+            open_mouth_session(Some(0.5), &[0.9, 0.05]),
+            Status::Failed(FailReason::Spoof)
+        );
+        // No score measured at all fails closed.
+        assert_eq!(
+            open_mouth_session(Some(0.5), &[]),
+            Status::Failed(FailReason::Spoof)
+        );
     }
 
     #[test]

@@ -4,4 +4,4 @@
 export type Challenge = 'blink' | 'turn_left' | 'turn_right' | 'open_mouth'
 export type PixelFormat = 'rgb' | 'bgr' | 'rgba' | 'bgra' | 'nv21'
 export type LivenessStatus = 'in_progress' | 'passed' | 'failed'
-export type FailReason = 'timeout' | 'step_timeout' | 'face_lost' | 'multiple_faces'
+export type FailReason = 'timeout' | 'step_timeout' | 'face_lost' | 'multiple_faces' | 'spoof_suspected'

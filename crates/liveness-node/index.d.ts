@@ -4,7 +4,7 @@
 export type Challenge = 'blink' | 'turn_left' | 'turn_right' | 'open_mouth'
 export type PixelFormat = 'rgb' | 'bgr' | 'rgba' | 'bgra' | 'nv21'
 export type LivenessStatus = 'in_progress' | 'passed' | 'failed'
-export type FailReason = 'timeout' | 'step_timeout' | 'face_lost' | 'multiple_faces'
+export type FailReason = 'timeout' | 'step_timeout' | 'face_lost' | 'multiple_faces' | 'spoof_suspected'
 /**
  * Frames in, liveness verdict out: face detection, landmarks and the challenge flow.
  * One engine is one liveness attempt; create a new one per attempt.
@@ -13,6 +13,16 @@ export declare class Engine {
   constructor(challenges: Challenge[], options?: SessionOptions | undefined | null)
   /** `count` challenges in random order. */
   static random(count: number, options?: SessionOptions | undefined | null): Engine
+  /**
+   * A session for a ticket from `SigningKey.issueTicket`. Throws if the ticket is forged,
+   * signed by another key, or expired. Every frame is hashed into the receipt.
+   */
+  static fromTicket(token: string, publicKey: Uint8Array, options?: SessionOptions | undefined | null): Engine
+  /**
+   * Signed receipt (JWT) for a finished ticketed session, for other services to check with
+   * `verifyReceipt`. Throws if the session isn't finished or the ticket has expired.
+   */
+  receipt(signingKey: SigningKey, options?: ReceiptOptions | undefined | null): string
   get challenges(): Challenge[]
   /** Processes one frame on the calling thread (blocks for the inference time). */
   process(frame: Uint8Array, options: FrameOptions): FrameResult
@@ -30,6 +40,20 @@ export declare class Session {
   get challenges(): Challenge[]
   /** One frame: how many faces are visible, and the main face's measurements if known. */
   update(timestampMs: number, observation?: Observation | undefined | null): FrameResult
+}
+
+/** Ed25519 key for issuing tickets and signing receipts. Keep it on your server. */
+export declare class SigningKey {
+  /** A new random key. */
+  static generate(): SigningKey
+  /** Loads a key saved with `toBytes()` (32 bytes). */
+  static fromBytes(secret: Uint8Array): SigningKey
+  /** The 32-byte secret: store it like a password. */
+  toBytes(): Buffer
+  /** The 32-byte public key, for verifying tickets and receipts. */
+  get publicKey(): Buffer
+  /** A signed ticket (JWT). */
+  issueTicket(options?: TicketOptions | undefined | null): string
 }
 
 /** A detected face in upright pixel coordinates. */
@@ -73,6 +97,12 @@ export interface FrameResult {
   faces: Array<FaceBox>
   /** 478 face-mesh landmarks [x, y] of the primary face, in upright pixels. */
   landmarks?: Array<[number, number]>
+  /**
+   * Passive anti-spoofing: probability (0-1) that the face is real rather than a photo or
+   * screen. Measured on every 3rd frame with a face (absent otherwise); uncalibrated for
+   * your cameras.
+   */
+  realScore?: number
 }
 
 export interface Observation {
@@ -83,6 +113,27 @@ export interface Observation {
   yaw?: number
 }
 
+/** A verified liveness receipt. */
+export interface Receipt {
+  /** The ticket's nonce: accept each nonce only once. */
+  nonce: string
+  challenges: Challenge[]
+  passed: boolean
+  failReason?: FailReason
+  frames: number
+  framesSha256: string
+  realScore?: number
+  issuedAt: number
+  expiresAt: number
+}
+
+export interface ReceiptOptions {
+  /** How long the receipt stays valid (default 300). */
+  ttlSecs?: number
+  /** Current Unix time in seconds (default: the system clock). */
+  now?: number
+}
+
 export interface SessionOptions {
   /** Fail if the whole check takes longer than this (default 30000). */
   totalTimeoutMs?: number
@@ -90,6 +141,14 @@ export interface SessionOptions {
   stepTimeoutMs?: number
   /** Fail if the face is out of view longer than this (default 1000). */
   faceLostMs?: number
+  /**
+   * If set, a session that completes its challenges still fails with 'spoof_suspected'
+   * when the mean anti-spoofing score is below it. Off by default: calibrate on your own
+   * cameras first (see `FrameResult.realScore`).
+   */
+  minRealScore?: number
+  /** For `Engine.fromTicket`: current Unix time in seconds (default: the system clock). */
+  now?: number
   /**
    * Only for `random`: fixes the challenge order. Leave unset in production so the
    * order comes from the OS and can't be predicted (and pre-recorded).
@@ -105,5 +164,30 @@ export interface Signals {
   /** Nose position between the face edges: ~0.5 facing the camera. */
   yaw: number
 }
+
+/** A verified challenge ticket. */
+export interface Ticket {
+  nonce: string
+  challenges: Challenge[]
+  issuedAt: number
+  expiresAt: number
+}
+
+export interface TicketOptions {
+  /** Challenges to ask for; default: `count` random ones. */
+  challenges?: Challenge[]
+  /** Number of random challenges when `challenges` is not given (default 3). */
+  count?: number
+  /** How long the ticket stays valid (default 120). */
+  ttlSecs?: number
+  /** Current Unix time in seconds (default: the system clock). */
+  now?: number
+}
+
+/** Checks a receipt's signature and expiry; throws if invalid. `now` is Unix seconds. */
+export declare function verifyReceipt(token: string, publicKey: Uint8Array, now?: number | undefined | null): Receipt
+
+/** Checks a ticket's signature and expiry; throws if invalid. `now` is Unix seconds. */
+export declare function verifyTicket(token: string, publicKey: Uint8Array, now?: number | undefined | null): Ticket
 
 export declare function version(): string

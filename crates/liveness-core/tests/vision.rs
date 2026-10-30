@@ -252,3 +252,175 @@ fn counts_two_faces_side_by_side() {
     assert_eq!(a.face_count(), 2);
     assert!(a.signals.is_some(), "the primary face is still measured");
 }
+
+#[test]
+fn anti_spoofing_matches_reference_on_a_real_photo() {
+    // minivision's PyTorch models + crop code on the same face box give 0.8553.
+    let a = analyze(&rgb_frame(&astronaut(), Rotation::Deg0, false));
+    let score = a.real_score.expect("anti-spoofing runs by default");
+    eprintln!("real score {score:.4}");
+    assert!((score - 0.8553).abs() < 0.005, "real score {score}");
+}
+
+#[cfg(feature = "attest")]
+#[test]
+fn ticketed_session_produces_a_verifiable_receipt() {
+    use liveness_core::attest::SigningKey;
+
+    let now = 1_800_000_000;
+    let key = SigningKey::generate().unwrap();
+    let (_, token) = key.issue_ticket(vec![Challenge::Blink], now, 120).unwrap();
+
+    // The server verifies the ticket it handed out, then runs the session for it.
+    let ticket = key.public_key().verify_ticket(&token, now + 5).unwrap();
+    let mut engine =
+        LivenessEngine::from_ticket(ticket.clone(), LivenessConfig::default()).unwrap();
+    assert!(
+        engine.receipt(now + 5, 300).is_err(),
+        "no receipt before the session ends"
+    );
+
+    let img = astronaut();
+    let mut frames = 0;
+    loop {
+        let frame = Frame {
+            timestamp_ms: frames * 500,
+            ..rgb_frame(&img, Rotation::Deg0, false)
+        };
+        frames += 1;
+        if engine.process(&frame).unwrap().status
+            != (Status::InProgress {
+                current: Challenge::Blink,
+                remaining: 1,
+            })
+        {
+            break;
+        }
+    }
+    let receipt = engine.receipt(now + 20, 300).unwrap();
+    assert_eq!(receipt.nonce, ticket.nonce);
+    assert_eq!(receipt.fail_reason, Some(FailReason::StepTimeout)); // a photo can't blink
+    assert_eq!(receipt.frames as u64, frames);
+    assert!(receipt.real_score.is_some());
+
+    let signed = key.sign_receipt(&receipt).unwrap();
+    let verified = key.public_key().verify_receipt(&signed, now + 60).unwrap();
+    assert_eq!(verified, receipt);
+    assert!(
+        SigningKey::generate()
+            .unwrap()
+            .public_key()
+            .verify_receipt(&signed, now + 60)
+            .is_err()
+    );
+    assert!(
+        key.public_key()
+            .verify_receipt(&signed, now + 20 + 301)
+            .is_err(),
+        "expired"
+    );
+    assert!(engine.receipt(now + 121, 300).is_err(), "ticket expired");
+}
+
+/// The photo printed on a flat card turned `deg` about its vertical axis, as a pinhole
+/// camera would see it (inverse-mapped, bilinear).
+fn turned_card(img: &RgbImage, deg: f32) -> RgbImage {
+    let (w, h) = (img.width() as f32, img.height() as f32);
+    let f = 1.2 * w;
+    let (sin, cos) = deg.to_radians().sin_cos();
+    RgbImage::from_fn(img.width(), img.height(), |u, v| {
+        // Output pixel -> point on the card: solve u' = f X cos / (f + X sin), v' = f Y / (f + X sin).
+        let (du, dv) = (u as f32 + 0.5 - w / 2.0, v as f32 + 0.5 - h / 2.0);
+        let x = du * f / (f * cos - du * sin);
+        let y = dv * (f + x * sin) / f;
+        let (sx, sy) = (x + w / 2.0 - 0.5, y + h / 2.0 - 0.5);
+        if sx < 0.0 || sy < 0.0 || sx > w - 1.0 || sy > h - 1.0 {
+            return image::Rgb([0, 0, 0]);
+        }
+        let (x0, y0) = (sx.floor() as u32, sy.floor() as u32);
+        let (x1, y1) = (
+            (x0 + 1).min(img.width() - 1),
+            (y0 + 1).min(img.height() - 1),
+        );
+        let (tx, ty) = (sx.fract(), sy.fract());
+        let mix = |c: usize| {
+            let p = |x, y| img.get_pixel(x, y)[c] as f32;
+            let top = p(x0, y0) * (1.0 - tx) + p(x1, y0) * tx;
+            let bottom = p(x0, y1) * (1.0 - tx) + p(x1, y1) * tx;
+            (top * (1.0 - ty) + bottom * ty).round() as u8
+        };
+        image::Rgb([mix(0), mix(1), mix(2)])
+    })
+}
+
+#[test]
+fn tilting_a_photo_cannot_fake_a_head_turn() {
+    let img = astronaut();
+    // Facing, then the card turned 40 degrees each way, held 1.5 s at a time.
+    let poses: Vec<(f32, RgbImage)> = [0.0, 40.0, 0.0, -40.0, 0.0]
+        .iter()
+        .map(|&d| (d, turned_card(&img, d)))
+        .collect();
+    for challenge in [Challenge::TurnLeft, Challenge::TurnRight] {
+        let mut engine = LivenessEngine::new(vec![challenge], LivenessConfig::default()).unwrap();
+        let mut t = 0;
+        // 2 s still for the baseline, then the poses at 5 fps.
+        for (deg, pose) in std::iter::repeat_n(&poses[0], 10)
+            .chain(poses.iter().flat_map(|p| std::iter::repeat_n(p, 8)))
+        {
+            let r = engine
+                .process(&Frame {
+                    timestamp_ms: t,
+                    ..rgb_frame(pose, Rotation::Deg0, false)
+                })
+                .unwrap();
+            assert!(
+                r.actions.is_empty(),
+                "{challenge:?}: card at {deg} degrees counted as {:?}",
+                r.actions
+            );
+            t += 200;
+        }
+    }
+    let yaw = |d| {
+        analyze(&rgb_frame(&turned_card(&img, d), Rotation::Deg0, false))
+            .signals
+            .unwrap()
+            .yaw
+    };
+    let (straight, left, right) = (yaw(0.0), yaw(40.0), yaw(-40.0));
+    eprintln!("card yaw: 0 deg {straight:.3}, +40 {left:.3}, -40 {right:.3}");
+    // A real head turn moves yaw by >= 0.3 (0.4+ in the recordings).
+    assert!((left - straight).abs() < 0.1 && (right - straight).abs() < 0.1);
+}
+
+#[test]
+fn anti_spoofing_runs_every_third_face_frame_by_default() {
+    let img = astronaut();
+    let frame = rgb_frame(&img, Rotation::Deg0, false);
+    let mut analyzer = FaceAnalyzer::new(AnalyzerConfig::default()).unwrap();
+    let scored: Vec<bool> = (0..7)
+        .map(|_| analyzer.analyze(&frame).unwrap().real_score.is_some())
+        .collect();
+    assert_eq!(scored, [true, false, false, true, false, false, true]);
+
+    let every = AnalyzerConfig {
+        antispoof_every: 1,
+        ..AnalyzerConfig::default()
+    };
+    let mut analyzer = FaceAnalyzer::new(every).unwrap();
+    assert!((0..3).all(|_| analyzer.analyze(&frame).unwrap().real_score.is_some()));
+
+    let off = AnalyzerConfig {
+        antispoof: false,
+        ..AnalyzerConfig::default()
+    };
+    assert!(
+        FaceAnalyzer::new(off)
+            .unwrap()
+            .analyze(&frame)
+            .unwrap()
+            .real_score
+            .is_none()
+    );
+}

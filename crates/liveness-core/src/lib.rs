@@ -1,4 +1,6 @@
 pub mod actions;
+#[cfg(feature = "attest")]
+pub mod attest;
 pub mod challenge;
 pub mod error;
 pub mod frame;

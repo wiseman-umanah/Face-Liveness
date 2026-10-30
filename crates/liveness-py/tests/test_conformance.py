@@ -19,12 +19,18 @@ def close(expected, actual, tol):
     return abs(expected - actual) <= tol
 
 
+APPROX = ("signals", "real_score")
+
+
 def check(expected, actual):
-    signals = expected.get("signals")
-    if signals is not None:
-        assert close(signals, actual["signals"], CASES["tolerance"]), (signals, actual["signals"])
-    assert {k: v for k, v in actual.items() if k != "signals"} == {
-        k: v for k, v in expected.items() if k != "signals"
+    """Exact match, except numbers under `APPROX` keys may differ by the shared tolerance."""
+    for key in APPROX:
+        if expected.get(key) is not None:
+            assert close(expected[key], actual[key], CASES["tolerance"]), (key, expected[key], actual[key])
+        else:
+            assert actual.get(key) == expected.get(key), key
+    assert {k: v for k, v in actual.items() if k not in APPROX} == {
+        k: v for k, v in expected.items() if k not in APPROX
     }
 
 
@@ -58,7 +64,7 @@ def test_engine_case(case):
     if case["format"] == "bgr":
         data[0::3], data[2::3] = data[2::3], data[0::3]
     engine = faceliveness.Engine(case["challenges"], **case["config"])
-    face_counts, signals, result = [], None, None
+    face_counts, signals, real_score, result = [], None, None, None
     for i in range(case["frames"]):
         t = i * case["interval_ms"]
         result = engine.process(
@@ -68,6 +74,7 @@ def test_engine_case(case):
         if i == 0 and result.signals:
             s = result.signals
             signals = {"ear": s.ear, "mouth": s.mouth, "yaw": s.yaw}
+            real_score = result.real_score
         if result.done:
             break
     check(
@@ -78,5 +85,30 @@ def test_engine_case(case):
             "at_ms": t if result.done else None,
             "face_counts": face_counts,
             "signals": signals,
+            "real_score": real_score,
+        },
+    )
+
+
+@pytest.mark.parametrize("case", CASES["receipt_cases"], ids=lambda c: c["name"])
+def test_receipt_case(case):
+    key = bytes.fromhex(case["public_key_hex"])
+    if "expected_error" in case:
+        with pytest.raises(ValueError, match=case["expected_error"]):
+            faceliveness.verify_receipt(case["token"], key, now=case["now"])
+        return
+    r = faceliveness.verify_receipt(case["token"], key, now=case["now"])
+    check(
+        case["expected"],
+        {
+            "nonce": r.nonce,
+            "challenges": r.challenges,
+            "passed": r.passed,
+            "fail_reason": r.fail_reason,
+            "frames": r.frames,
+            "frames_sha256": r.frames_sha256,
+            "real_score": r.real_score,
+            "issued_at": r.issued_at,
+            "expires_at": r.expires_at,
         },
     )

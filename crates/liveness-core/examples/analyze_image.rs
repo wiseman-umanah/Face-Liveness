@@ -88,6 +88,9 @@ fn main() {
         ),
         None => println!("no landmarks"),
     }
+    if let Some(score) = analysis.real_score {
+        println!("anti-spoofing real score {score:.3} (1 = real face, 0 = photo/screen)");
+    }
     println!(
         "\nmodel load {load_time:.0?}   first frame {first_time:.0?}   per frame {per_frame:.1?}"
     );

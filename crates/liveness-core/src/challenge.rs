@@ -62,9 +62,20 @@ pub enum FailReason {
     FaceLost,
     /// More than one face was visible for longer than `multiple_faces_ms`.
     MultipleFaces,
+    /// The challenges were completed, but passive anti-spoofing scored the face as a likely
+    /// photo or screen (only when `LivenessConfig::min_real_score` is set).
+    Spoof,
 }
 
 impl FailReason {
+    pub const ALL: [FailReason; 5] = [
+        FailReason::Timeout,
+        FailReason::StepTimeout,
+        FailReason::FaceLost,
+        FailReason::MultipleFaces,
+        FailReason::Spoof,
+    ];
+
     /// Snake-case name used by the language bindings.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -72,6 +83,7 @@ impl FailReason {
             FailReason::StepTimeout => "step_timeout",
             FailReason::FaceLost => "face_lost",
             FailReason::MultipleFaces => "multiple_faces",
+            FailReason::Spoof => "spoof_suspected",
         }
     }
 }

@@ -16,7 +16,18 @@ from __future__ import annotations
 from typing import Any, Iterable, Literal, Optional
 
 from faceliveness import _core
-from faceliveness._core import FaceBox, FrameResult, Session, Signals, version
+from faceliveness._core import (
+    FaceBox,
+    FrameResult,
+    Receipt,
+    Session,
+    Signals,
+    SigningKey,
+    Ticket,
+    verify_receipt,
+    verify_ticket,
+    version,
+)
 
 __all__ = [
     "CHALLENGES",
@@ -25,8 +36,13 @@ __all__ = [
     "FaceBox",
     "FrameResult",
     "PixelFormat",
+    "Receipt",
     "Session",
     "Signals",
+    "SigningKey",
+    "Ticket",
+    "verify_receipt",
+    "verify_ticket",
     "version",
 ]
 
@@ -51,12 +67,17 @@ class Engine:
         total_timeout_ms: Optional[int] = None,
         step_timeout_ms: Optional[int] = None,
         face_lost_ms: Optional[int] = None,
+        min_real_score: Optional[float] = None,
     ) -> None:
+        """min_real_score: if set, a session that completes its challenges still fails with
+        "spoof_suspected" when the mean anti-spoofing score is below it. Off by default:
+        calibrate on your own cameras first (see FrameResult.real_score)."""
         self._engine = _core.Engine(
             list(challenges),
             total_timeout_ms=total_timeout_ms,
             step_timeout_ms=step_timeout_ms,
             face_lost_ms=face_lost_ms,
+            min_real_score=min_real_score,
         )
 
     @classmethod
@@ -68,6 +89,7 @@ class Engine:
         total_timeout_ms: Optional[int] = None,
         step_timeout_ms: Optional[int] = None,
         face_lost_ms: Optional[int] = None,
+        min_real_score: Optional[float] = None,
     ) -> "Engine":
         """`count` challenges in random order. Leave `seed` unset in production: it then
         comes from the OS, so users can't predict (and pre-record) the challenges."""
@@ -78,8 +100,42 @@ class Engine:
             total_timeout_ms=total_timeout_ms,
             step_timeout_ms=step_timeout_ms,
             face_lost_ms=face_lost_ms,
+            min_real_score=min_real_score,
         )
         return engine
+
+    @classmethod
+    def from_ticket(
+        cls,
+        token: str,
+        public_key: bytes,
+        *,
+        now: Optional[int] = None,
+        total_timeout_ms: Optional[int] = None,
+        step_timeout_ms: Optional[int] = None,
+        face_lost_ms: Optional[int] = None,
+        min_real_score: Optional[float] = None,
+    ) -> "Engine":
+        """A session for a ticket from `SigningKey.issue_ticket`. Raises ValueError if the
+        ticket is forged, signed by another key, or expired. Every frame is hashed into the
+        receipt; `now` is Unix seconds (default: the system clock)."""
+        engine = cls.__new__(cls)
+        engine._engine = _core.Engine.from_ticket(
+            token,
+            public_key,
+            now=now,
+            total_timeout_ms=total_timeout_ms,
+            step_timeout_ms=step_timeout_ms,
+            face_lost_ms=face_lost_ms,
+            min_real_score=min_real_score,
+        )
+        return engine
+
+    def receipt(self, signing_key: SigningKey, *, ttl_secs: int = 300, now: Optional[int] = None) -> str:
+        """Signed receipt (JWT) for a finished ticketed session, for other services to check
+        with `verify_receipt`. Raises ValueError if the session isn't finished or the ticket
+        has expired."""
+        return self._engine.receipt(signing_key, ttl_secs=ttl_secs, now=now)
 
     @property
     def challenges(self) -> list[Challenge]:

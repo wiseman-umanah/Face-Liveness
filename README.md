@@ -194,6 +194,18 @@ The project uses:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
+## Security
+
+- **Challenge-response:** random actions with time limits. Printed photos can't pass: they
+  can't blink, and tilting one doesn't register as a head turn (tested).
+- **Passive anti-spoofing:** MiniFASNet scores each frame for print/screen texture. It's
+  report-only until you calibrate a threshold with `tools/calibrate_spoof.py`.
+- **Server-side trust:** signed tickets fix the challenges; signed receipts (Ed25519 JWTs) carry
+  the outcome and a SHA-256 chain over every frame, verifiable by any JWT library.
+
+Not defended: live deepfakes, injected virtual cameras and 3D masks. See the
+[threat model](docs/threat-model.md) for every attack, its status and the evidence.
+
 ## Roadmap
 
 Done:
@@ -201,10 +213,11 @@ Done:
 - Adaptive blink, mouth-open and head-turn detectors, tuned on recorded sessions.
 - Face detection and 478-point landmarks in pure Rust, matching MediaPipe.
 - `faceliveness` packages for Python and Node.js, with cross-language conformance tests.
+- Passive anti-spoofing and server-verifiable signed tickets and receipts.
 
 Next:
 
-- Passive anti-spoofing (screen and print detection) and server-verifiable signed results.
+- Calibrate anti-spoofing on recorded genuine and attack sessions.
 - Browser (WASM) build and a live demo.
 - iOS and Android bindings.
 - Smaller packages and faster inference.
