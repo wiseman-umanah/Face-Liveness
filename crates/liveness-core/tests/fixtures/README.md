@@ -10,6 +10,10 @@ a face are not written, so a jump in `ts_ms` means the face was lost.
 | `session_02.csv` | `prototype/session_02.csv` | Contains a 5.7 s face-lost gap |
 | `session_03.csv` | `prototype/session.csv` | Believed to be the glasses recording; blink dips stay above 0.75 x baseline |
 
+These recordings are of the project author, who consents to sharing them for testing. They
+are per-frame measurements only (no images or landmarks). Don't add recordings of other people
+without their consent.
+
 There are no hand labels yet (true blink/turn counts), so tests lock in current
 behaviour and Python parity rather than accuracy. Record labelled sessions to measure accuracy.
 
