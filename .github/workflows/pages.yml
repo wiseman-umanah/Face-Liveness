@@ -1,0 +1,53 @@
+name: Demo (GitHub Pages)
+
+# Builds the WebAssembly engine and publishes demo/ as a static site. Without the Node server
+# the page runs in on-device mode. One-time setup: Settings -> Pages -> Source: GitHub Actions.
+on:
+  push:
+    branches: [master]
+    paths: ['crates/liveness-core/**', 'crates/liveness-wasm/**', 'demo/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.129
+      - name: Build WebAssembly
+        run: crates/liveness-wasm/build.sh
+      - name: Test WebAssembly against the shared conformance cases
+        run: node crates/liveness-wasm/tests/conformance.mjs
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp demo/index.html demo/app.js demo/worker.js demo/style.css site/
+          cp -r crates/liveness-wasm/pkg site/pkg
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

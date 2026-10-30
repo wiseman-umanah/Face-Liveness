@@ -191,7 +191,10 @@ impl FaceAnalyzer {
             if let Some(points) = self.landmarks(&view, &roi)? {
                 self.tracked = Some(landmarks::roi_from_landmarks(&points));
                 analysis.signals = Some(landmarks::signals(&points));
-                if self.faces_seen % self.config.antispoof_every.max(1) == 0 {
+                if self
+                    .faces_seen
+                    .is_multiple_of(self.config.antispoof_every.max(1))
+                {
                     analysis.real_score = self.real_score(&view, &points)?;
                 }
                 self.faces_seen = self.faces_seen.wrapping_add(1);

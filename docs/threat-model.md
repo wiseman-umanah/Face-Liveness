@@ -27,6 +27,8 @@ in this repository checks it; "untested" means it's a design argument only.
 | Real-time deepfake / face swap, virtual camera, injected video stream | **Not defended** | Needs camera/device attestation or injection detection, which this project doesn't provide |
 | High-quality 3D mask | **Not defended** | MiniFASNet isn't evaluated against masks |
 | Client claims "passed" without doing the check | **Defended** with server-side tickets and receipts | Results only count when your server ran the engine and signed the receipt (*tested*: wrong key, tampering, `alg: none`, ticket/receipt confusion, expiry and future-dated tokens are all rejected) |
+| Client sends fake timestamps (e.g. slow motion to stretch time limits) | **Defended** in the demo server | `demo/server.mjs` timestamps frames with the server's clock and ignores client times; do the same in your backend |
+| Browser (on-device) result reported as "passed" | **Not trustworthy by design** | On-device mode is for feedback and demos; the demo labels it "not tamper-proof". Use server-verified mode for decisions |
 | Client picks easier challenges or reuses an old ticket | **Defended** | Tickets are signed and expire (default 120 s) |
 | Replaying a receipt | Defended **if you track nonces** | Receipts expire (default 300 s); a verifier must also accept each nonce only once, which needs storage on your side |
 | Second person doing the actions | Partly | A second face in view fails the session after 0.5 s; someone fully out of frame is not detected |

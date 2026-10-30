@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Face Liveness demo</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Face Liveness</h1>
+        <p>
+          A liveness check that runs in your browser: Rust compiled to WebAssembly, with
+          MediaPipe face models and passive anti-spoofing. No video leaves your device unless
+          you use server-verified mode.
+        </p>
+      </header>
+
+      <section class="stage">
+        <div class="camera">
+          <video id="video" playsinline muted></video>
+          <canvas id="overlay"></canvas>
+          <div id="prompt" class="prompt">Press start and allow the camera</div>
+        </div>
+        <ol id="steps" class="steps"></ol>
+        <div class="controls">
+          <button id="start" disabled>Loading…</button>
+          <label id="server-toggle" hidden>
+            <input type="checkbox" id="server-mode" checked /> Server-verified
+          </label>
+          <span id="mode" class="badge"></span>
+        </div>
+        <p id="stats" class="stats"></p>
+      </section>
+
+      <section id="result" class="result" hidden>
+        <h2 id="verdict"></h2>
+        <p id="verdict-detail"></p>
+        <details id="receipt-box" hidden>
+          <summary>Signed receipt</summary>
+          <pre id="receipt"></pre>
+        </details>
+      </section>
+
+      <footer>
+        <a href="https://github.com/wiseman-umanah/Face-Liveness">Source</a> ·
+        <a href="https://github.com/wiseman-umanah/Face-Liveness/blob/master/docs/threat-model.md">What this does and doesn't protect against</a>
+      </footer>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

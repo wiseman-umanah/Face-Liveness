@@ -22,7 +22,8 @@ face-liveness/
 │   │   ├── Cargo.toml
 │   │   ├── pyproject.toml
 │   │   └── src/
-│   └── liveness-node/
+│   ├── liveness-node/
+│   └── liveness-wasm/
 │       ├── Cargo.toml
 │       ├── package.json
 │       └── src/
@@ -34,6 +35,7 @@ face-liveness/
 - **`liveness-core`** — the Rust core: face detection and landmarks, action detectors, challenge flow.
 - **`liveness-py`** — the [`faceliveness`](crates/liveness-py/README.md) Python package (PyO3 + maturin).
 - **`liveness-node`** — the [`faceliveness`](crates/liveness-node/README.md) npm package (napi-rs).
+- **`liveness-wasm`** — the WebAssembly build for browsers (wasm-bindgen), used by [`demo/`](demo/README.md).
 
 The bindings are thin wrappers: all logic lives in `liveness-core`, and the shared cases in
 `tests/conformance/cases.json` check that Rust, Python and Node give identical results.
@@ -120,6 +122,19 @@ ffmpeg -loglevel error -f v4l2 -video_size 640x480 -i /dev/video0 -vf fps=15 -f 
 
 `--csv` writes the same format as `probe.py`, so a video can be replayed with the `replay` example
 or compared with Google's MediaPipe using `tools/mediapipe_csv.py` and `tools/compare_csv.py`.
+
+### Browser demo
+
+The same engine compiled to WebAssembly, with a demo page that runs on-device or, with the
+bundled Node server, as a server-verified check with signed receipts:
+
+```bash
+crates/liveness-wasm/build.sh && cp -r crates/liveness-wasm/pkg demo/pkg
+node demo/server.mjs        # http://localhost:8080 (needs crates/liveness-node built)
+```
+
+See [demo/README.md](demo/README.md). `.github/workflows/pages.yml` publishes the on-device
+version to GitHub Pages (enable Pages with "GitHub Actions" as the source).
 
 ### Python package
 
@@ -214,11 +229,11 @@ Done:
 - Face detection and 478-point landmarks in pure Rust, matching MediaPipe.
 - `faceliveness` packages for Python and Node.js, with cross-language conformance tests.
 - Passive anti-spoofing and server-verifiable signed tickets and receipts.
+- Browser (WebAssembly) build and a live demo, on-device or server-verified.
 
 Next:
 
 - Calibrate anti-spoofing on recorded genuine and attack sessions.
-- Browser (WASM) build and a live demo.
 - iOS and Android bindings.
 - Smaller packages and faster inference.
 

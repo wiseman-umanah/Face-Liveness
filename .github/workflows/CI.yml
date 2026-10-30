@@ -72,3 +72,23 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
       - run: uv run pytest -q
+
+  wasm:
+    name: WebAssembly (browser build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.129
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: cargo clippy --target wasm32-unknown-unknown -p liveness-wasm -- -D warnings
+      - run: crates/liveness-wasm/build.sh
+      - run: node crates/liveness-wasm/tests/conformance.mjs
