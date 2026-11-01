@@ -45,15 +45,21 @@ test('Uint8Array, BGR and RGBA frames agree', (t) => {
 
 test('processAsync keeps the event loop free', async (t) => {
   const engine = new Engine(['blink'])
+  // Count event-loop turns with setImmediate, not a timer: timers are ~15 ms coarse on Windows.
   let ticks = 0
-  const timer = setInterval(() => ticks++, 1)
+  let running = true
+  const spin = () => {
+    ticks++
+    if (running) setImmediate(spin)
+  }
+  setImmediate(spin)
   for (let i = 0; i < 5; i++) {
     const r = await engine.processAsync(face, { ...size, timestampMs: i * 100 })
     t.is(r.faceCount, 1)
   }
-  clearInterval(timer)
-  // A blocking call would let the timer fire at most a few times.
-  t.true(ticks > 20, `timer fired ${ticks} times`)
+  running = false
+  // A blocking call would allow only a handful of turns while 5 frames are processed.
+  t.true(ticks > 100, `event loop turned ${ticks} times`)
 })
 
 test('random uses OS randomness unless seeded', (t) => {
