@@ -22,6 +22,8 @@ self.onmessage = async ({ data: msg }) => {
         timestampMs: msg.timestampMs,
       })
       self.postMessage({ type: 'result', result, ms: performance.now() - start })
+    } else if (msg.type === 'capture') {
+      self.postMessage({ type: 'capture', capture: engine?.capture() ?? null })
     }
   } catch (error) {
     self.postMessage({ type: 'error', message: String(error?.message ?? error) })

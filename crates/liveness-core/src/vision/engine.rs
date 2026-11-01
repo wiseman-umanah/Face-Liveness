@@ -1,3 +1,4 @@
+use super::capture::{self, FaceCapture};
 use super::{AnalyzerConfig, FaceAnalysis, FaceAnalyzer};
 #[cfg(feature = "attest")]
 use crate::attest::{FrameDigest, Receipt, Ticket};
@@ -25,6 +26,8 @@ pub struct LivenessEngine {
     analyzer: FaceAnalyzer,
     session: LivenessSession,
     status: Option<Status>,
+    capture_size: u32,
+    capture: Option<FaceCapture>,
     #[cfg(feature = "attest")]
     ticket: Option<(Ticket, FrameDigest)>,
 }
@@ -55,9 +58,23 @@ impl LivenessEngine {
             analyzer,
             session,
             status: None,
+            capture_size: capture::DEFAULT_SIZE,
+            capture: None,
             #[cfg(feature = "attest")]
             ticket: None,
         }
+    }
+
+    /// Side of the face record crop (default 112, the usual face-recognition input; 32-512).
+    pub fn set_capture_size(&mut self, size: u32) {
+        self.capture_size = size.clamp(32, 512);
+    }
+
+    /// The best face seen during the session so far: what to hand to face matching.
+    /// Only trust it together with a passed receipt (see
+    /// [`PublicKey::verify_face_record`](crate::attest::PublicKey::verify_face_record)).
+    pub fn capture(&self) -> Option<&FaceCapture> {
+        self.capture.as_ref()
     }
 
     /// A session for a verified ticket (see [`crate::attest`]): the ticket fixes the
@@ -96,6 +113,8 @@ impl LivenessEngine {
             frames: digest.frames(),
             frames_sha256: digest.hex(),
             real_score: self.session.mean_real_score(),
+            face_sha256: self.capture.as_ref().map(FaceCapture::sha256_hex),
+            face_quality: self.capture.as_ref().map(|c| c.quality),
             issued_at: now,
             expires_at: now + ttl_secs,
         })
@@ -115,15 +134,43 @@ impl LivenessEngine {
         if let Some((_, digest)) = &mut self.ticket {
             digest.update(frame);
         }
+        let was_running = matches!(self.status, None | Some(Status::InProgress { .. }));
         let (status, actions) =
             self.session
                 .observe(frame.timestamp_ms, analysis.face_count(), analysis.signals);
         self.status = Some(status.clone());
+        // Keep the best face of the session, up to and including the frame that ends it.
+        if was_running && analysis.face_count() == 1 {
+            self.consider_capture(frame, &analysis);
+        }
         Ok(FrameResult {
             status,
             actions,
             analysis,
         })
+    }
+
+    fn consider_capture(&mut self, frame: &Frame, analysis: &FaceAnalysis) {
+        let (Some(points), Some(signals)) = (&analysis.landmarks, &analysis.signals) else {
+            return;
+        };
+        let size = self.capture_size;
+        let (rgb, quality) = self
+            .analyzer
+            .capture_candidate(frame, points, signals, size);
+        if self
+            .capture
+            .as_ref()
+            .is_none_or(|best| quality > best.quality)
+        {
+            self.capture = Some(FaceCapture {
+                png: capture::encode_png(&rgb, size),
+                rgb,
+                size,
+                quality,
+                timestamp_ms: frame.timestamp_ms,
+            });
+        }
     }
 
     /// Takes the analyzer back, e.g. to start the next session without reloading models.

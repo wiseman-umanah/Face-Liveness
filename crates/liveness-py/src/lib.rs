@@ -12,6 +12,7 @@ use liveness_core::signals::FaceSignals;
 use liveness_core::vision::{FaceAnalysis, LivenessEngine};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 fn to_py(e: LivenessError) -> PyErr {
     match e {
@@ -313,6 +314,24 @@ impl Engine {
         self.inner.challenges().iter().map(|c| c.as_str()).collect()
     }
 
+    /// Side of the face record crop (default 112; 32-512).
+    fn set_capture_size(&mut self, size: u32) {
+        self.inner.set_capture_size(size);
+    }
+
+    /// The best face of the session so far, or None if no single face was seen.
+    #[getter]
+    fn capture(&self) -> Option<FaceCapture> {
+        self.inner.capture().map(|c| FaceCapture {
+            png: c.png.clone(),
+            rgb: c.rgb.clone(),
+            size: c.size,
+            quality: c.quality,
+            timestamp_ms: c.timestamp_ms,
+            sha256: c.sha256_hex(),
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (data, width, height, stride, format, rotation, mirrored, timestamp_ms))]
     fn process_raw(
@@ -495,6 +514,9 @@ struct Receipt {
     frames: u32,
     frames_sha256: String,
     real_score: Option<f32>,
+    /// Hex SHA-256 of the session's face record PNG, if a face was captured.
+    face_sha256: Option<String>,
+    face_quality: Option<f32>,
     issued_at: u64,
     expires_at: u64,
 }
@@ -528,6 +550,24 @@ fn verify_ticket(token: &str, public_key: &[u8], now: Option<u64>) -> PyResult<T
     })
 }
 
+impl From<attest::Receipt> for Receipt {
+    fn from(r: attest::Receipt) -> Self {
+        Self {
+            passed: r.passed(),
+            nonce: r.nonce,
+            challenges: names(&r.challenges),
+            fail_reason: r.fail_reason.map(|f| f.as_str()),
+            frames: r.frames,
+            frames_sha256: r.frames_sha256,
+            real_score: r.real_score,
+            face_sha256: r.face_sha256,
+            face_quality: r.face_quality,
+            issued_at: r.issued_at,
+            expires_at: r.expires_at,
+        }
+    }
+}
+
 /// Checks a receipt's signature and expiry; raises ValueError if invalid.
 #[pyfunction]
 #[pyo3(signature = (token, public_key, *, now=None))]
@@ -535,17 +575,64 @@ fn verify_receipt(token: &str, public_key: &[u8], now: Option<u64>) -> PyResult<
     let r = self::public_key(public_key)?
         .verify_receipt(token, now_or_clock(now))
         .map_err(to_py)?;
-    Ok(Receipt {
-        passed: r.passed(),
-        nonce: r.nonce,
-        challenges: names(&r.challenges),
-        fail_reason: r.fail_reason.map(|f| f.as_str()),
-        frames: r.frames,
-        frames_sha256: r.frames_sha256,
-        real_score: r.real_score,
-        issued_at: r.issued_at,
-        expires_at: r.expires_at,
-    })
+    Ok(r.into())
+}
+
+/// For the face-matching service: checks the receipt (signature, expiry), that the session
+/// passed, and that `face_png` is exactly the face record it vouches for. Raises ValueError
+/// otherwise. Accept each nonce only once.
+#[pyfunction]
+#[pyo3(signature = (token, public_key, face_png, *, now=None))]
+fn verify_face_record(
+    token: &str,
+    public_key: &[u8],
+    face_png: &[u8],
+    now: Option<u64>,
+) -> PyResult<Receipt> {
+    let r = self::public_key(public_key)?
+        .verify_face_record(token, now_or_clock(now), face_png)
+        .map_err(to_py)?;
+    Ok(r.into())
+}
+
+/// The best face of a liveness session, aligned for face matching.
+#[pyclass(frozen, module = "faceliveness")]
+struct FaceCapture {
+    png: Vec<u8>,
+    rgb: Vec<u8>,
+    /// Side of the square crop in pixels.
+    #[pyo3(get)]
+    size: u32,
+    /// 0-1 suitability for matching (frontal, eyes open, mouth closed, sharp, well lit).
+    #[pyo3(get)]
+    quality: f32,
+    #[pyo3(get)]
+    timestamp_ms: u64,
+    /// Hex SHA-256 of `png`, as recorded in the receipt.
+    #[pyo3(get)]
+    sha256: String,
+}
+
+#[pymethods]
+impl FaceCapture {
+    /// The aligned face as PNG: store and send these exact bytes.
+    #[getter]
+    fn png<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.png)
+    }
+
+    /// The same image as raw RGB bytes (size * size * 3).
+    #[getter]
+    fn rgb<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.rgb)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "FaceCapture(size={}, quality={:.3}, timestamp_ms={})",
+            self.size, self.quality, self.timestamp_ms
+        )
+    }
 }
 
 #[pyfunction]
@@ -566,5 +653,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Receipt>()?;
     m.add_function(wrap_pyfunction!(verify_ticket, m)?)?;
     m.add_function(wrap_pyfunction!(verify_receipt, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_face_record, m)?)?;
+    m.add_class::<FaceCapture>()?;
     Ok(())
 }

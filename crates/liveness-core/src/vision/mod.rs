@@ -3,11 +3,13 @@
 //! Rust does, including WASM and mobile.
 
 mod antispoof;
+mod capture;
 mod detector;
 mod engine;
 mod image;
 mod landmarks;
 
+pub use capture::{DEFAULT_SIZE as DEFAULT_CAPTURE_SIZE, FaceCapture};
 pub use engine::{FrameResult, LivenessEngine};
 
 use tract_onnx::prelude::*;
@@ -233,6 +235,20 @@ impl FaceAnalyzer {
             &input,
             self.config.min_detection_score,
         ))
+    }
+
+    /// Aligned face crop of `points` and its quality, for the session's face record.
+    pub(crate) fn capture_candidate(
+        &self,
+        frame: &Frame,
+        points: &[Point],
+        signals: &FaceSignals,
+        size: u32,
+    ) -> (Vec<u8>, f32) {
+        let view = UprightView::new(frame);
+        let (rgb, magnification) = capture::align(&view, points, size);
+        let quality = capture::quality(signals, points, &rgb, size, magnification);
+        (rgb, quality)
     }
 
     /// Mean "real face" probability over the anti-spoofing models, or None if they are off.

@@ -65,6 +65,8 @@ pub struct SessionOptions {
   pub min_real_score: Option<f64>,
   /// For `Engine.fromTicket`: current Unix time in seconds (default: the system clock).
   pub now: Option<i64>,
+  /// Side of the face record crop, `engine.capture()` (default 112; 32-512).
+  pub capture_size: Option<u32>,
   /// Only for `random`: fixes the challenge order. Leave unset in production so the
   /// order comes from the OS and can't be predicted (and pre-recorded).
   pub seed: Option<BigInt>,
@@ -317,9 +319,10 @@ impl Engine {
     #[napi(ts_arg_type = "Challenge[]")] challenges: Vec<String>,
     options: Option<SessionOptions>,
   ) -> Result<Self> {
-    let config = options.unwrap_or_default().config()?;
-    let engine = LivenessEngine::new(parse_challenges(&challenges)?, config).map_err(to_js)?;
-    Ok(Self::wrap(engine))
+    let options = options.unwrap_or_default();
+    let engine =
+      LivenessEngine::new(parse_challenges(&challenges)?, options.config()?).map_err(to_js)?;
+    Ok(Self::wrap(engine, &options))
   }
 
   /// `count` challenges in random order.
@@ -328,7 +331,7 @@ impl Engine {
     let options = options.unwrap_or_default();
     let engine =
       LivenessEngine::random(count as usize, options.seed()?, options.config()?).map_err(to_js)?;
-    Ok(Self::wrap(engine))
+    Ok(Self::wrap(engine, &options))
   }
 
   /// A session for a ticket from `SigningKey.issueTicket`. Throws if the ticket is forged,
@@ -344,7 +347,7 @@ impl Engine {
       .verify_ticket(&token, now_or_clock(options.now)?)
       .map_err(to_js)?;
     let engine = LivenessEngine::from_ticket(ticket, options.config()?).map_err(to_js)?;
-    Ok(Self::wrap(engine))
+    Ok(Self::wrap(engine, &options))
   }
 
   /// Signed receipt (JWT) for a finished ticketed session, for other services to check with
@@ -365,7 +368,25 @@ impl Engine {
     signing_key.inner.sign_receipt(&receipt).map_err(to_js)
   }
 
-  fn wrap(engine: LivenessEngine) -> Self {
+  /// The best face of the session so far, aligned for face matching, or null if no single
+  /// face was seen. Send `png` with the receipt to your matching service, which checks both
+  /// with `verifyFaceRecord`.
+  #[napi]
+  pub fn capture(&self) -> Result<Option<FaceCapture>> {
+    Ok(lock(&self.inner)?.capture().map(|c| FaceCapture {
+      png: c.png.clone().into(),
+      rgb: c.rgb.clone().into(),
+      size: c.size,
+      quality: c.quality.into(),
+      timestamp_ms: c.timestamp_ms as i64,
+      sha256: c.sha256_hex(),
+    }))
+  }
+
+  fn wrap(mut engine: LivenessEngine, options: &SessionOptions) -> Self {
+    if let Some(size) = options.capture_size {
+      engine.set_capture_size(size);
+    }
     let challenges = challenge_names(engine.challenges());
     Self {
       inner: Arc::new(Mutex::new(engine)),
@@ -588,8 +609,44 @@ pub struct Receipt {
   pub frames: u32,
   pub frames_sha256: String,
   pub real_score: Option<f64>,
+  /// Hex SHA-256 of the session's face record PNG, if a face was captured.
+  pub face_sha256: Option<String>,
+  pub face_quality: Option<f64>,
   pub issued_at: i64,
   pub expires_at: i64,
+}
+
+impl From<attest::Receipt> for Receipt {
+  fn from(r: attest::Receipt) -> Self {
+    Self {
+      passed: r.passed(),
+      nonce: r.nonce,
+      challenges: challenge_names(&r.challenges),
+      fail_reason: r.fail_reason.map(|f| f.as_str().to_string()),
+      frames: r.frames,
+      frames_sha256: r.frames_sha256,
+      real_score: r.real_score.map(f64::from),
+      face_sha256: r.face_sha256,
+      face_quality: r.face_quality.map(f64::from),
+      issued_at: r.issued_at as i64,
+      expires_at: r.expires_at as i64,
+    }
+  }
+}
+
+/// The best face of a liveness session, aligned for face matching.
+#[napi(object)]
+pub struct FaceCapture {
+  /// The aligned face as PNG: store and send these exact bytes.
+  pub png: Buffer,
+  /// The same image as raw RGB bytes (size * size * 3).
+  pub rgb: Buffer,
+  pub size: u32,
+  /// 0-1 suitability for matching (frontal, eyes open, mouth closed, sharp, well lit).
+  pub quality: f64,
+  pub timestamp_ms: i64,
+  /// Hex SHA-256 of `png`, as recorded in the receipt.
+  pub sha256: String,
 }
 
 /// Checks a ticket's signature and expiry; throws if invalid. `now` is Unix seconds.
@@ -612,17 +669,23 @@ pub fn verify_receipt(token: String, public_key: Uint8Array, now: Option<i64>) -
   let r = self::public_key(&public_key)?
     .verify_receipt(&token, now_or_clock(now)?)
     .map_err(to_js)?;
-  Ok(Receipt {
-    passed: r.passed(),
-    nonce: r.nonce,
-    challenges: challenge_names(&r.challenges),
-    fail_reason: r.fail_reason.map(|f| f.as_str().to_string()),
-    frames: r.frames,
-    frames_sha256: r.frames_sha256,
-    real_score: r.real_score.map(f64::from),
-    issued_at: r.issued_at as i64,
-    expires_at: r.expires_at as i64,
-  })
+  Ok(r.into())
+}
+
+/// For the face-matching service: checks the receipt (signature, expiry), that the session
+/// passed, and that `facePng` is exactly the face record it vouches for; throws otherwise.
+/// Accept each nonce only once.
+#[napi]
+pub fn verify_face_record(
+  token: String,
+  public_key: Uint8Array,
+  face_png: Uint8Array,
+  now: Option<i64>,
+) -> Result<Receipt> {
+  let r = self::public_key(&public_key)?
+    .verify_face_record(&token, now_or_clock(now)?, &face_png)
+    .map_err(to_js)?;
+  Ok(r.into())
 }
 
 #[napi]

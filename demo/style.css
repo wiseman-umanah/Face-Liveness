@@ -42,3 +42,6 @@ button:disabled { opacity: 0.5; cursor: default; }
 pre { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; color: var(--muted); }
 footer { margin-top: 32px; font-size: 0.9rem; }
 footer a { color: var(--accent); }
+figure { display: flex; align-items: center; gap: 14px; margin: 12px 0 0; }
+figure img { width: 112px; height: 112px; border-radius: 8px; image-rendering: auto; }
+figcaption { color: var(--muted); font-size: 0.9rem; line-height: 1.4; }

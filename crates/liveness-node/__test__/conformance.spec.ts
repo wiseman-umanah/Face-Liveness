@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import test from 'ava'
 
-import { Engine, Session, verifyReceipt } from '../index.js'
+import { Engine, Session, verifyFaceRecord, verifyReceipt } from '../index.js'
 
 const root = join(import.meta.dirname, '../../..')
 const cases = JSON.parse(readFileSync(join(root, 'tests/conformance/cases.json'), 'utf8'))
@@ -19,7 +19,7 @@ function close(expected: any, actual: any, tol: number): boolean {
 }
 
 // Numbers under these keys may differ by the shared tolerance; everything else must match exactly.
-const APPROX = ['signals', 'real_score']
+const APPROX = ['signals', 'real_score', 'face_quality']
 
 function check(t: any, expected: any, actual: any) {
   const strip = (o: any) => Object.fromEntries(Object.entries(o).filter(([k]) => !APPROX.includes(k)))
@@ -94,18 +94,28 @@ for (const c of cases.engine_cases) {
       face_counts: faceCounts,
       signals,
       real_score: realScore,
+      face_quality: engine.capture()?.quality ?? null,
     })
   })
+}
+
+// The bytes a case hands to verifyFaceRecord (one byte flipped if `face_tampered`).
+function faceRecord(c: any): Buffer {
+  const data = readFileSync(join(root, c.face_record))
+  if (c.face_tampered) data[100] ^= 1
+  return data
 }
 
 for (const c of cases.receipt_cases) {
   test(`receipt: ${c.name}`, (t) => {
     const key = Buffer.from(c.public_key_hex, 'hex')
+    const verify = () =>
+      c.face_record ? verifyFaceRecord(c.token, key, faceRecord(c), c.now) : verifyReceipt(c.token, key, c.now)
     if (c.expected_error) {
-      t.throws(() => verifyReceipt(c.token, key, c.now), { message: new RegExp(c.expected_error) })
+      t.throws(verify, { message: new RegExp(c.expected_error) })
       return
     }
-    const r = verifyReceipt(c.token, key, c.now)
+    const r = verify()
     check(t, c.expected, {
       nonce: r.nonce,
       challenges: r.challenges,
@@ -114,6 +124,8 @@ for (const c of cases.receipt_cases) {
       frames: r.frames,
       frames_sha256: r.framesSha256,
       real_score: r.realScore ?? null,
+      face_sha256: r.faceSha256 ?? null,
+      face_quality: r.faceQuality ?? null,
       issued_at: r.issuedAt,
       expires_at: r.expiresAt,
     })

@@ -70,7 +70,7 @@ fn matches(expected: &Value, actual: &Value, tolerance: f64) -> bool {
             e.len() == a.len()
                 && e.iter().all(|(k, ev)| {
                     a.get(k).is_some_and(|av| {
-                        if k == "signals" || k == "real_score" {
+                        if k == "signals" || k == "real_score" || k == "face_quality" {
                             close(ev, av, tolerance)
                         } else {
                             matches(ev, av, tolerance)
@@ -173,6 +173,7 @@ fn run_engine_case(case: &Value) -> Value {
         "face_counts": face_counts,
         "signals": first_signals,
         "real_score": first_real_score,
+        "face_quality": engine.capture().map(|c| c.quality),
     })
 }
 
@@ -216,6 +217,8 @@ fn check_receipt_signing(case: &Value, failures: &mut Vec<String>) {
         frames: r["frames"].as_u64().unwrap() as u32,
         frames_sha256: r["frames_sha256"].as_str().unwrap().into(),
         real_score: r["real_score"].as_f64().map(|x| x as f32),
+        face_sha256: r["face_sha256"].as_str().map(String::from),
+        face_quality: r["face_quality"].as_f64().map(|x| x as f32),
         issued_at: r["issued_at"].as_u64().unwrap(),
         expires_at: r["expires_at"].as_u64().unwrap(),
     };
@@ -231,7 +234,19 @@ fn check_receipt_signing(case: &Value, failures: &mut Vec<String>) {
     }
 }
 
+/// The face record a receipt case hands to `verify_face_record`, if any: the file's bytes,
+/// with one byte flipped when the case says `"face_tampered": true`.
+#[cfg(feature = "attest")]
+fn face_record_bytes(case: &Value) -> Option<Vec<u8>> {
+    let mut bytes = std::fs::read(repo_root().join(case["face_record"].as_str()?)).unwrap();
+    if case["face_tampered"].as_bool() == Some(true) {
+        bytes[100] ^= 1;
+    }
+    Some(bytes)
+}
+
 /// What every binding reports for a receipt case: the verified fields or the error.
+/// Cases with a `face_record` go through `verify_face_record`, the rest through `verify_receipt`.
 #[cfg(feature = "attest")]
 fn run_receipt_case(case: &Value) -> Value {
     use liveness_core::attest::PublicKey;
@@ -240,10 +255,13 @@ fn run_receipt_case(case: &Value) -> Value {
         return Value::Null;
     };
     let key = PublicKey::from_bytes(&hex_bytes(public)).unwrap();
-    match key.verify_receipt(
-        case["token"].as_str().unwrap_or(""),
-        case["now"].as_u64().unwrap(),
-    ) {
+    let token = case["token"].as_str().unwrap_or("");
+    let now = case["now"].as_u64().unwrap();
+    let verified = match face_record_bytes(case) {
+        Some(face) => key.verify_face_record(token, now, &face),
+        None => key.verify_receipt(token, now),
+    };
+    match verified {
         Ok(r) => json!({
             "nonce": r.nonce,
             "challenges": r.challenges.iter().map(|c| c.as_str()).collect::<Vec<_>>(),
@@ -252,6 +270,8 @@ fn run_receipt_case(case: &Value) -> Value {
             "frames": r.frames,
             "frames_sha256": r.frames_sha256,
             "real_score": r.real_score,
+            "face_sha256": r.face_sha256,
+            "face_quality": r.face_quality,
             "issued_at": r.issued_at,
             "expires_at": r.expires_at,
         }),

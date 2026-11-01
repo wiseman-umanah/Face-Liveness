@@ -4,17 +4,18 @@
 //
 // Flow: POST /api/session issues a signed ticket and starts an engine for it; the browser posts
 // frames to /api/session/:nonce/frame; when the check ends the response carries a signed
-// receipt; POST /api/verify checks a receipt the way another service would (signature, expiry,
+// receipt plus the session's face record (an aligned face PNG); POST /api/verify checks them
+// the way your face-matching service would (signature, expiry, passed, face hash,
 // and each nonce only once). Timing uses the server's clock, not the client's.
 //
 // Uses the `faceliveness` npm package built from crates/liveness-node (pnpm build there first);
-// in your own app: import { Engine, SigningKey, verifyReceipt, verifyTicket } from 'faceliveness'
+// in your own app: import { Engine, SigningKey, verifyFaceRecord, verifyReceipt, verifyTicket } from 'faceliveness'
 
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
 
-import { Engine, SigningKey, verifyReceipt, verifyTicket } from '../crates/liveness-node/index.js'
+import { Engine, SigningKey, verifyFaceRecord, verifyReceipt, verifyTicket } from '../crates/liveness-node/index.js'
 
 const PORT = Number(process.env.PORT ?? 8080)
 const HOST = process.env.HOST ?? '127.0.0.1'
@@ -109,7 +110,14 @@ async function frame(req, res, nonce, url) {
       timestampMs: Date.now() - session.startedAt, // server clock: the client can't stretch time
     })
     if (result.done) {
-      session.final = { ...publicStatus(result), receipt: session.engine.receipt(key) }
+      // The face record goes with the receipt; the receipt's face_sha256 vouches for it.
+      const capture = session.engine.capture()
+      session.final = {
+        ...publicStatus(result),
+        receipt: session.engine.receipt(key),
+        facePng: capture?.png.toString('base64'),
+        faceQuality: capture?.quality,
+      }
       return send(res, 200, session.final)
     }
     send(res, 200, publicStatus(result))
@@ -118,11 +126,20 @@ async function frame(req, res, nonce, url) {
   }
 }
 
+// What your face-matching service does before enrolling or comparing a face: accept it only
+// with a valid receipt from a passed session whose face_sha256 matches the PNG exactly.
 async function verify(req, res) {
-  const token = (await readBody(req, 8192)).toString('utf8').trim()
+  let body
+  try {
+    body = JSON.parse((await readBody(req, 512 * 1024)).toString('utf8'))
+  } catch {
+    return send(res, 400, { error: 'expected JSON { receipt, facePng? }' })
+  }
   let receipt
   try {
-    receipt = verifyReceipt(token, key.publicKey)
+    receipt = body.facePng
+      ? verifyFaceRecord(body.receipt, key.publicKey, Buffer.from(body.facePng, 'base64'))
+      : verifyReceipt(body.receipt, key.publicKey)
   } catch (error) {
     return send(res, 200, { valid: false, error: error.message })
   }

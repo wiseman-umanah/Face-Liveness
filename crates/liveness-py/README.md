@@ -97,6 +97,33 @@ if r.passed and not already_used(r.nonce):    # accept each nonce once
 
 Tickets and receipts are standard Ed25519 (`EdDSA`) JWTs, so any JWT library can verify them.
 
+## Face record for matching
+
+Each session keeps its best face: the frame that is most frontal, eyes open, mouth closed,
+sharp, well lit and large enough, aligned to the standard 112x112 template most
+face-recognition models expect (ArcFace, SFace, MobileFaceNet...). Pass `capture_size=` for
+another size.
+
+```python
+c = engine.capture                  # FaceCapture or None
+c.png                               # aligned face as PNG bytes: store/send these exact bytes
+c.quality                           # 0-1; below ~0.3 matching will be unreliable
+np.frombuffer(c.rgb, np.uint8).reshape(c.size, c.size, 3)   # as a NumPy array
+```
+
+The signed receipt records `face_sha256` (the PNG's hash) and `face_quality`, so liveness and
+the face record are one signed fact. In your face-matching service, accept a face only like
+this:
+
+```python
+r = faceliveness.verify_face_record(receipt, public_key, face_png)
+# raises unless: genuine and unexpired receipt, session passed, and face_png is the exact
+# image the receipt vouches for. Then also reject a nonce you've seen before.
+```
+
+This stops someone from passing liveness with their own face and then submitting a photo of
+someone else for matching.
+
 ## Security notes
 
 - Challenge-response stops printed photos (they can't blink, and tilting one doesn't count as a

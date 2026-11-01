@@ -129,7 +129,8 @@
           "mouth": 0.1671,
           "yaw": 0.4751
         },
-        "status": "failed"
+        "status": "failed",
+        "face_quality": 0.7325
       }
     },
     {
@@ -154,7 +155,8 @@
           "mouth": 0.1671,
           "yaw": 0.4751
         },
-        "status": "failed"
+        "status": "failed",
+        "face_quality": 0.7325
       }
     }
   ],
@@ -186,7 +188,9 @@
         "frames_sha256": "5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f",
         "real_score": 0.75,
         "issued_at": 1800000000,
-        "expires_at": 1800000300
+        "expires_at": 1800000300,
+        "face_sha256": null,
+        "face_quality": null
       }
     },
     {
@@ -219,6 +223,73 @@
       "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmYWNlbGl2ZW5lc3MiLCJraW5kIjoicmVjZWlwdCIsImp0aSI6IjAwMTEyMjMzNDQ1NTY2Nzc4ODk5YWFiYmNjZGRlZWZmIiwiaWF0IjoxODAwMDAwMDAwLCJleHAiOjE4MDAwMDAzMDAsImNoYWxsZW5nZXMiOlsiYmxpbmsiLCJ0dXJuX2xlZnQiXSwic3RhdHVzIjoicGFzc2VkIiwiZnJhbWVzIjo4NywiZnJhbWVzX3NoYTI1NiI6IjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWYiLCJyZWFsX3Njb3JlIjowLjc1fQ.TAmxgHvyOFLROanhDEL2-3f4gYt2MvIUMt32khS5OC8qp3ObNPUJcB2DpKlo1j8aGQoa-ZiR_W07VEtmoizmAw",
       "now": 1799999000,
       "expected_error": "not valid yet"
+    },
+    {
+      "name": "face_record_verifies",
+      "description": "A passed receipt vouching for a face record; verify_face_record with that exact file must succeed.",
+      "secret_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+      "receipt": {
+        "nonce": "ffeeddccbbaa99887766554433221100",
+        "challenges": ["blink", "turn_left"],
+        "passed": true,
+        "fail_reason": null,
+        "frames": 87,
+        "frames_sha256": "5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f",
+        "real_score": 0.75,
+        "issued_at": 1800000000,
+        "expires_at": 1800000300,
+        "face_sha256": "839c9764673a7b9666ff10b47af8fad78cab40e30d0fe2e7b3c52e6ea2bd9919",
+        "face_quality": 0.73
+      },
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmYWNlbGl2ZW5lc3MiLCJraW5kIjoicmVjZWlwdCIsImp0aSI6ImZmZWVkZGNjYmJhYTk5ODg3NzY2NTU0NDMzMjIxMTAwIiwiaWF0IjoxODAwMDAwMDAwLCJleHAiOjE4MDAwMDAzMDAsImNoYWxsZW5nZXMiOlsiYmxpbmsiLCJ0dXJuX2xlZnQiXSwic3RhdHVzIjoicGFzc2VkIiwiZnJhbWVzIjo4NywiZnJhbWVzX3NoYTI1NiI6IjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWYiLCJyZWFsX3Njb3JlIjowLjc1LCJmYWNlX3NoYTI1NiI6IjgzOWM5NzY0NjczYTdiOTY2NmZmMTBiNDdhZjhmYWQ3OGNhYjQwZTMwZDBmZTJlN2IzYzUyZTZlYTJiZDk5MTkiLCJmYWNlX3F1YWxpdHkiOjAuNzN9.-e0ECqg-AoWet0ixzGOu4XUTcSV8sqC81bYoVjPu00TKtyd8XWUpylzZVBSQfsOLRISEAlWeI06Py8O4zVCsBw",
+      "face_record": "crates/liveness-core/tests/fixtures/astronaut_face.png",
+      "now": 1800000100,
+      "expected": {
+        "nonce": "ffeeddccbbaa99887766554433221100",
+        "challenges": ["blink", "turn_left"],
+        "passed": true,
+        "fail_reason": null,
+        "frames": 87,
+        "frames_sha256": "5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f",
+        "real_score": 0.75,
+        "issued_at": 1800000000,
+        "expires_at": 1800000300,
+        "face_sha256": "839c9764673a7b9666ff10b47af8fad78cab40e30d0fe2e7b3c52e6ea2bd9919",
+        "face_quality": 0.73
+      }
+    },
+    {
+      "name": "tampered_face_record_is_rejected",
+      "description": "Same receipt, but one byte of the face record changed.",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmYWNlbGl2ZW5lc3MiLCJraW5kIjoicmVjZWlwdCIsImp0aSI6ImZmZWVkZGNjYmJhYTk5ODg3NzY2NTU0NDMzMjIxMTAwIiwiaWF0IjoxODAwMDAwMDAwLCJleHAiOjE4MDAwMDAzMDAsImNoYWxsZW5nZXMiOlsiYmxpbmsiLCJ0dXJuX2xlZnQiXSwic3RhdHVzIjoicGFzc2VkIiwiZnJhbWVzIjo4NywiZnJhbWVzX3NoYTI1NiI6IjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWYiLCJyZWFsX3Njb3JlIjowLjc1LCJmYWNlX3NoYTI1NiI6IjgzOWM5NzY0NjczYTdiOTY2NmZmMTBiNDdhZjhmYWQ3OGNhYjQwZTMwZDBmZTJlN2IzYzUyZTZlYTJiZDk5MTkiLCJmYWNlX3F1YWxpdHkiOjAuNzN9.-e0ECqg-AoWet0ixzGOu4XUTcSV8sqC81bYoVjPu00TKtyd8XWUpylzZVBSQfsOLRISEAlWeI06Py8O4zVCsBw",
+      "face_record": "crates/liveness-core/tests/fixtures/astronaut_face.png",
+      "face_tampered": true,
+      "now": 1800000100,
+      "expected_error": "does not match"
+    },
+    {
+      "name": "face_record_from_failed_session_is_rejected",
+      "secret_hex": "0707070707070707070707070707070707070707070707070707070707070707",
+      "receipt": {
+        "nonce": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "challenges": ["blink", "turn_left"],
+        "passed": false,
+        "fail_reason": "step_timeout",
+        "frames": 87,
+        "frames_sha256": "5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f5f",
+        "real_score": 0.75,
+        "issued_at": 1800000000,
+        "expires_at": 1800000300,
+        "face_sha256": "839c9764673a7b9666ff10b47af8fad78cab40e30d0fe2e7b3c52e6ea2bd9919",
+        "face_quality": 0.73
+      },
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJmYWNlbGl2ZW5lc3MiLCJraW5kIjoicmVjZWlwdCIsImp0aSI6IjBmMWUyZDNjNGI1YTY5Nzg4Nzk2YTViNGMzZDJlMWYwIiwiaWF0IjoxODAwMDAwMDAwLCJleHAiOjE4MDAwMDAzMDAsImNoYWxsZW5nZXMiOlsiYmxpbmsiLCJ0dXJuX2xlZnQiXSwic3RhdHVzIjoiZmFpbGVkIiwiZmFpbF9yZWFzb24iOiJzdGVwX3RpbWVvdXQiLCJmcmFtZXMiOjg3LCJmcmFtZXNfc2hhMjU2IjoiNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZjVmNWY1ZiIsInJlYWxfc2NvcmUiOjAuNzUsImZhY2Vfc2hhMjU2IjoiODM5Yzk3NjQ2NzNhN2I5NjY2ZmYxMGI0N2FmOGZhZDc4Y2FiNDBlMzBkMGZlMmU3YjNjNTJlNmVhMmJkOTkxOSIsImZhY2VfcXVhbGl0eSI6MC43M30.VFdAcQC-w4qFAUHLh35NWqwCqJLHfOqhC8DPWPxmrs4Gq8NEyKAIKD47-b1dBE2JW2HLYbTe3joBHQBIIyw9Bw",
+      "face_record": "crates/liveness-core/tests/fixtures/astronaut_face.png",
+      "now": 1800000100,
+      "expected_error": "did not pass"
     }
   ]
 }

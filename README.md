@@ -215,6 +215,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
   can't blink, and tilting one doesn't register as a head turn (tested).
 - **Passive anti-spoofing:** MiniFASNet scores each frame for print/screen texture. It's
   report-only until you calibrate a threshold with `tools/calibrate_spoof.py`.
+- **Face record:** each session hands over its best face, aligned for face-recognition
+  models, and the signed receipt vouches for that exact image (`verify_face_record`).
 - **Server-side trust:** signed tickets fix the challenges; signed receipts (Ed25519 JWTs) carry
   the outcome and a SHA-256 chain over every frame, verifiable by any JWT library.
 
@@ -229,6 +231,8 @@ Done:
 - Face detection and 478-point landmarks in pure Rust, matching MediaPipe.
 - `faceliveness` packages for Python and Node.js, with cross-language conformance tests.
 - Passive anti-spoofing and server-verifiable signed tickets and receipts.
+- Face record for matching: best-frame selection, alignment to the standard template, bound to
+  the signed receipt.
 - Browser (WebAssembly) build and a live demo, on-device or server-verified.
 
 Next:

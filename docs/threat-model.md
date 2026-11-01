@@ -13,7 +13,10 @@ in this repository checks it; "untested" means it's a design argument only.
 3. **Passive anti-spoofing (report-only by default).** Two MiniFASNet models score each frame
    for print/screen texture (`real_score`, 0-1). Setting `min_real_score` makes a low mean
    score fail the session; it is off until you calibrate it (see below).
-4. **Server-side trust (optional).** Your server signs a ticket fixing the challenges and an
+4. **Face record.** The session's best frame (frontal, eyes open, sharp, well lit) is aligned
+   for face matching and its hash goes into the receipt, so liveness and the face to match are
+   bound together.
+5. **Server-side trust (optional).** Your server signs a ticket fixing the challenges and an
    expiry, runs the engine on the frames, and signs a receipt with the outcome and a SHA-256
    chain over every frame. Receipts are standard Ed25519 JWTs.
 
@@ -29,6 +32,7 @@ in this repository checks it; "untested" means it's a design argument only.
 | Client claims "passed" without doing the check | **Defended** with server-side tickets and receipts | Results only count when your server ran the engine and signed the receipt (*tested*: wrong key, tampering, `alg: none`, ticket/receipt confusion, expiry and future-dated tokens are all rejected) |
 | Client sends fake timestamps (e.g. slow motion to stretch time limits) | **Defended** in the demo server | `demo/server.mjs` timestamps frames with the server's clock and ignores client times; do the same in your backend |
 | Browser (on-device) result reported as "passed" | **Not trustworthy by design** | On-device mode is for feedback and demos; the demo labels it "not tamper-proof". Use server-verified mode for decisions |
+| Pass liveness with your own face, then submit someone else's photo for face matching | **Defended** with `verify_face_record` | The face record is captured from the live session and its SHA-256 is in the signed receipt; the matcher accepts only that exact image from a passed session (*tested*: tampered image, failed session, missing face all rejected, in every language) |
 | Client picks easier challenges or reuses an old ticket | **Defended** | Tickets are signed and expire (default 120 s) |
 | Replaying a receipt | Defended **if you track nonces** | Receipts expire (default 300 s); a verifier must also accept each nonce only once, which needs storage on your side |
 | Second person doing the actions | Partly | A second face in view fails the session after 0.5 s; someone fully out of frame is not detected |

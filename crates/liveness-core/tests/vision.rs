@@ -424,3 +424,125 @@ fn anti_spoofing_runs_every_third_face_frame_by_default() {
             .is_none()
     );
 }
+
+/// One frame through an engine, returning its face record.
+fn face_record(
+    img: &RgbImage,
+    rotation: Rotation,
+    size: u32,
+) -> liveness_core::vision::FaceCapture {
+    let mut engine =
+        LivenessEngine::new(vec![Challenge::Blink], LivenessConfig::default()).unwrap();
+    engine.set_capture_size(size);
+    engine.process(&rgb_frame(img, rotation, false)).unwrap();
+    engine.capture().expect("a face record").clone()
+}
+
+#[test]
+fn face_record_is_aligned_to_the_standard_template() {
+    let capture = face_record(&astronaut(), Rotation::Deg0, 256);
+    assert_eq!(capture.size, 256);
+    let decoded = image::load_from_memory(&capture.png).unwrap().to_rgb8();
+    assert_eq!(
+        decoded.as_raw(),
+        &capture.rgb,
+        "PNG decodes to the raw pixels"
+    );
+
+    // Find the face again inside the record. Alignment is a best fit of 5 points (pupils,
+    // nose, mouth corners), so each lands within a few pixels of the template; what must hold
+    // exactly is level eyes at the template's spacing and position.
+    let a = analyze(&rgb_frame(&decoded, Rotation::Deg0, false));
+    let p = landmarks(&a);
+    let k = 256.0 / 112.0;
+    let (left, right) = ((p[468].x, p[468].y), (p[473].x, p[473].y));
+    let template = [
+        (38.2946 * k + 0.5, 51.6963 * k + 0.5),
+        (73.5318 * k + 0.5, 51.5014 * k + 0.5),
+    ];
+    for ((x, y), (tx, ty)) in [left, right].into_iter().zip(template) {
+        let d = ((x - tx).powi(2) + (y - ty).powi(2)).sqrt();
+        eprintln!("pupil at ({x:.1}, {y:.1}), template ({tx:.1}, {ty:.1}): {d:.2} px");
+        // 8 px here is 3.5 px at the standard 112 size: a typical 5-point fit residual (this
+        // face's wide smile pulls the fit; measured 4.8 and 6.1 px).
+        assert!(d < 8.0, "pupil {d:.2} px from the template (256 px crop)");
+    }
+    let tilt = (right.1 - left.1).atan2(right.0 - left.0).to_degrees();
+    let spacing = (right.0 - left.0) / (template[1].0 - template[0].0);
+    eprintln!("eye line tilt {tilt:.2} degrees, spacing {spacing:.3} x template");
+    assert!(tilt.abs() < 2.0, "eyes not level: {tilt:.2} degrees");
+    assert!(
+        (spacing - 1.0).abs() < 0.08,
+        "eye spacing {spacing:.3} x template"
+    );
+}
+
+#[test]
+fn face_record_ignores_camera_rotation() {
+    let img = astronaut();
+    let upright = face_record(&img, Rotation::Deg0, 112);
+    let rotated = face_record(&image::imageops::rotate270(&img), Rotation::Deg90, 112);
+    let diff: f64 = upright
+        .rgb
+        .iter()
+        .zip(&rotated.rgb)
+        .map(|(a, b)| (*a as f64 - *b as f64).abs())
+        .sum::<f64>()
+        / upright.rgb.len() as f64;
+    eprintln!("rotated vs upright: mean pixel difference {diff:.3}");
+    assert!(diff < 1.0);
+}
+
+#[test]
+fn face_record_quality_drops_for_blur_and_small_faces() {
+    let img = astronaut();
+    let sharp = face_record(&img, Rotation::Deg0, 112).quality;
+    let blurred = face_record(&image::imageops::blur(&img, 3.0), Rotation::Deg0, 112).quality;
+    let small = image::imageops::resize(&img, 96, 96, image::imageops::FilterType::Triangle);
+    let tiny = face_record(&small, Rotation::Deg0, 112).quality;
+    eprintln!("quality: sharp {sharp:.3}, blurred {blurred:.3}, small face {tiny:.3}");
+    assert!(sharp > 0.5);
+    assert!(blurred < sharp * 0.5);
+    assert!(tiny < sharp * 0.5);
+}
+
+#[cfg(feature = "attest")]
+#[test]
+fn receipt_vouches_for_the_face_record() {
+    use liveness_core::attest::{SigningKey, sha256_hex};
+
+    let now = 1_800_000_000;
+    let key = SigningKey::generate().unwrap();
+    let (ticket, _) = key.issue_ticket(vec![Challenge::Blink], now, 120).unwrap();
+    let mut engine = LivenessEngine::from_ticket(ticket, LivenessConfig::default()).unwrap();
+    let img = astronaut();
+    for i in 0..30 {
+        let frame = Frame {
+            timestamp_ms: i * 500,
+            ..rgb_frame(&img, Rotation::Deg0, false)
+        };
+        if engine.process(&frame).unwrap().status
+            != (Status::InProgress {
+                current: Challenge::Blink,
+                remaining: 1,
+            })
+        {
+            break;
+        }
+    }
+    let capture = engine.capture().unwrap().clone();
+    let receipt = engine.receipt(now + 20, 300).unwrap();
+    assert_eq!(
+        receipt.face_sha256.as_deref(),
+        Some(sha256_hex(&capture.png).as_str())
+    );
+    assert_eq!(receipt.face_quality, Some(capture.quality));
+
+    // A photo can't blink, so the session failed: its face must not be accepted for matching.
+    let token = key.sign_receipt(&receipt).unwrap();
+    let err = key
+        .public_key()
+        .verify_face_record(&token, now + 30, &capture.png)
+        .unwrap_err();
+    assert!(err.to_string().contains("did not pass"), "{err}");
+}

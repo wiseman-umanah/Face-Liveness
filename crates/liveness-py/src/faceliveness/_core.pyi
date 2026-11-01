@@ -99,6 +99,9 @@ class Engine:
         min_real_score: Optional[float] = None,
     ) -> Engine: ...
     def receipt(self, signing_key: SigningKey, *, ttl_secs: int = 300, now: Optional[int] = None) -> str: ...
+    def set_capture_size(self, size: int) -> None: ...
+    @property
+    def capture(self) -> Optional[FaceCapture]: ...
     @property
     def challenges(self) -> list[_Challenge]: ...
     def process_raw(
@@ -194,9 +197,38 @@ class Receipt:
     @property
     def real_score(self) -> Optional[float]: ...
     @property
+    def face_sha256(self) -> Optional[str]:
+        """Hex SHA-256 of the session's face record PNG, if a face was captured."""
+    @property
+    def face_quality(self) -> Optional[float]: ...
+    @property
     def issued_at(self) -> int: ...
     @property
     def expires_at(self) -> int: ...
+
+class FaceCapture:
+    """The best face of a liveness session, aligned for face matching."""
+
+    @property
+    def png(self) -> bytes:
+        """The aligned face as PNG: store and send these exact bytes."""
+    @property
+    def rgb(self) -> bytes:
+        """The same image as raw RGB bytes (size * size * 3)."""
+    @property
+    def size(self) -> int: ...
+    @property
+    def quality(self) -> float:
+        """0-1 suitability for matching (frontal, eyes open, mouth closed, sharp, well lit)."""
+    @property
+    def timestamp_ms(self) -> int: ...
+    @property
+    def sha256(self) -> str:
+        """Hex SHA-256 of `png`, as recorded in the receipt."""
+
+def verify_face_record(token: str, public_key: bytes, face_png: bytes, *, now: Optional[int] = None) -> Receipt:
+    """For the face-matching service: checks the receipt, that the session passed, and that
+    `face_png` is exactly the face record it vouches for; raises ValueError otherwise."""
 
 def verify_ticket(token: str, public_key: bytes, *, now: Optional[int] = None) -> Ticket:
     """Checks a ticket's signature and expiry; raises ValueError if invalid."""

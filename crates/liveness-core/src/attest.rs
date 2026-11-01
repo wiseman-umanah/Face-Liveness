@@ -34,6 +34,11 @@ fn invalid(msg: impl Into<String>) -> LivenessError {
     LivenessError::InvalidToken(msg.into())
 }
 
+/// Hex SHA-256 of `bytes`.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -166,9 +171,29 @@ impl PublicKey {
                 .frames_sha256
                 .ok_or_else(|| missing("frames_sha256"))?,
             real_score: claims.real_score,
+            face_sha256: claims.face_sha256,
+            face_quality: claims.face_quality,
             issued_at: claims.iat,
             expires_at: claims.exp,
         })
+    }
+
+    /// For the face-matching service: checks the receipt (signature, expiry), that the session
+    /// **passed**, and that `face_png` is exactly the face record the receipt vouches for.
+    /// Only then is the face safe to enrol or compare. Still accept each nonce only once.
+    pub fn verify_face_record(&self, token: &str, now: u64, face_png: &[u8]) -> Result<Receipt> {
+        let receipt = self.verify_receipt(token, now)?;
+        if !receipt.passed() {
+            return Err(invalid("the liveness session did not pass"));
+        }
+        let expected = receipt
+            .face_sha256
+            .as_deref()
+            .ok_or_else(|| invalid("receipt has no face record"))?;
+        if sha256_hex(face_png) != expected {
+            return Err(invalid("face record does not match the receipt"));
+        }
+        Ok(receipt)
     }
 
     fn verify(&self, token: &str, kind: &str, now: u64) -> Result<Claims> {
@@ -248,6 +273,8 @@ impl Ticket {
             frames: None,
             frames_sha256: None,
             real_score: None,
+            face_sha256: None,
+            face_quality: None,
         }
     }
 }
@@ -266,6 +293,11 @@ pub struct Receipt {
     pub frames_sha256: String,
     /// Mean passive anti-spoofing "real" probability, if it was measured.
     pub real_score: Option<f32>,
+    /// Hex SHA-256 of the face record's PNG bytes (see
+    /// [`FaceCapture`](crate::vision::FaceCapture)), if the session captured a face.
+    pub face_sha256: Option<String>,
+    /// Quality (0-1) of that face record.
+    pub face_quality: Option<f32>,
     pub issued_at: u64,
     pub expires_at: u64,
 }
@@ -288,6 +320,8 @@ impl Receipt {
             frames: Some(self.frames),
             frames_sha256: Some(self.frames_sha256.clone()),
             real_score: self.real_score,
+            face_sha256: self.face_sha256.clone(),
+            face_quality: self.face_quality,
         }
     }
 }
@@ -310,6 +344,10 @@ struct Claims {
     frames_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     real_score: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    face_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    face_quality: Option<f32>,
 }
 
 /// SHA-256 chain over frames: `h0 = sha256(nonce)`, `h(n) = sha256(h(n-1) || frame n)`, where
@@ -370,9 +408,46 @@ mod tests {
             frames: 42,
             frames_sha256: "ab".repeat(32),
             real_score: Some(0.9),
+            face_sha256: None,
+            face_quality: None,
             issued_at: NOW,
             expires_at: NOW + 300,
         }
+    }
+
+    #[test]
+    fn face_record_is_bound_to_a_passed_receipt() {
+        let k = key();
+        let face = b"\x89PNG pretend face record".to_vec();
+        let with_face = Receipt {
+            face_sha256: Some(sha256_hex(&face)),
+            face_quality: Some(0.8),
+            ..receipt("abc")
+        };
+        let token = k.sign_receipt(&with_face).unwrap();
+        let pk = k.public_key();
+        assert_eq!(
+            pk.verify_face_record(&token, NOW, &face).unwrap(),
+            with_face
+        );
+
+        let mut swapped = face.clone();
+        swapped[5] ^= 1;
+        let err = pk.verify_face_record(&token, NOW, &swapped).unwrap_err();
+        assert!(err.to_string().contains("does not match"), "{err}");
+
+        let failed = Receipt {
+            fail_reason: Some(FailReason::Spoof),
+            ..with_face.clone()
+        };
+        let err = pk
+            .verify_face_record(&k.sign_receipt(&failed).unwrap(), NOW, &face)
+            .unwrap_err();
+        assert!(err.to_string().contains("did not pass"), "{err}");
+
+        let no_face = k.sign_receipt(&receipt("abc")).unwrap();
+        let err = pk.verify_face_record(&no_face, NOW, &face).unwrap_err();
+        assert!(err.to_string().contains("no face record"), "{err}");
     }
 
     #[test]

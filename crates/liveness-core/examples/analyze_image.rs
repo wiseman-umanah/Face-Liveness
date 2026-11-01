@@ -6,11 +6,15 @@
 //!   --rotate 90|180|270   treat the image as needing this clockwise rotation to be upright
 //!   --mirrored            treat the image as mirrored (selfie view)
 //!   --landmarks           print all 478 landmarks as JSON ([[x, y], ...]) instead of a summary
+//!   --capture out.png     save the aligned face record (the PNG a liveness session hands to
+//!                         face matching) and print its quality
 
 use std::time::Instant;
 
+use liveness_core::challenge::Challenge;
 use liveness_core::frame::{Frame, PixelFormat, Rotation};
-use liveness_core::vision::{AnalyzerConfig, FaceAnalyzer};
+use liveness_core::session::{LivenessConfig, LivenessSession};
+use liveness_core::vision::{AnalyzerConfig, FaceAnalyzer, LivenessEngine};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -87,6 +91,34 @@ fn main() {
             s.ear, s.mouth, s.yaw
         ),
         None => println!("no landmarks"),
+    }
+    if let Some(out) = args
+        .iter()
+        .position(|a| a == "--capture")
+        .and_then(|i| args.get(i + 1))
+    {
+        // One frame through an engine produces the face record a session would.
+        let session =
+            LivenessSession::new(vec![Challenge::Blink], LivenessConfig::default()).unwrap();
+        let mut engine = LivenessEngine::from_parts(
+            FaceAnalyzer::new(AnalyzerConfig::default()).unwrap(),
+            session,
+        );
+        engine
+            .process(&frame)
+            .unwrap_or_else(|e| fail(&e.to_string()));
+        match engine.capture() {
+            Some(c) => {
+                std::fs::write(out, &c.png).unwrap_or_else(|e| fail(&format!("{out}: {e}")));
+                println!(
+                    "face record: {out} ({0}x{0}, quality {1:.3}, {2} bytes)",
+                    c.size,
+                    c.quality,
+                    c.png.len()
+                );
+            }
+            None => println!("face record: none (no single face)"),
+        }
     }
     if let Some(score) = analysis.real_score {
         println!("anti-spoofing real score {score:.3} (1 = real face, 0 = photo/screen)");

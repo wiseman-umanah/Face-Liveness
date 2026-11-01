@@ -23,6 +23,12 @@ export declare class Engine {
    * `verifyReceipt`. Throws if the session isn't finished or the ticket has expired.
    */
   receipt(signingKey: SigningKey, options?: ReceiptOptions | undefined | null): string
+  /**
+   * The best face of the session so far, aligned for face matching, or null if no single
+   * face was seen. Send `png` with the receipt to your matching service, which checks both
+   * with `verifyFaceRecord`.
+   */
+  capture(): FaceCapture | null
   get challenges(): Challenge[]
   /** Processes one frame on the calling thread (blocks for the inference time). */
   process(frame: Uint8Array, options: FrameOptions): FrameResult
@@ -63,6 +69,20 @@ export interface FaceBox {
   width: number
   height: number
   score: number
+}
+
+/** The best face of a liveness session, aligned for face matching. */
+export interface FaceCapture {
+  /** The aligned face as PNG: store and send these exact bytes. */
+  png: Buffer
+  /** The same image as raw RGB bytes (size * size * 3). */
+  rgb: Buffer
+  size: number
+  /** 0-1 suitability for matching (frontal, eyes open, mouth closed, sharp, well lit). */
+  quality: number
+  timestampMs: number
+  /** Hex SHA-256 of `png`, as recorded in the receipt. */
+  sha256: string
 }
 
 export interface FrameOptions {
@@ -123,6 +143,9 @@ export interface Receipt {
   frames: number
   framesSha256: string
   realScore?: number
+  /** Hex SHA-256 of the session's face record PNG, if a face was captured. */
+  faceSha256?: string
+  faceQuality?: number
   issuedAt: number
   expiresAt: number
 }
@@ -149,6 +172,8 @@ export interface SessionOptions {
   minRealScore?: number
   /** For `Engine.fromTicket`: current Unix time in seconds (default: the system clock). */
   now?: number
+  /** Side of the face record crop, `engine.capture()` (default 112; 32-512). */
+  captureSize?: number
   /**
    * Only for `random`: fixes the challenge order. Leave unset in production so the
    * order comes from the OS and can't be predicted (and pre-recorded).
@@ -183,6 +208,13 @@ export interface TicketOptions {
   /** Current Unix time in seconds (default: the system clock). */
   now?: number
 }
+
+/**
+ * For the face-matching service: checks the receipt (signature, expiry), that the session
+ * passed, and that `facePng` is exactly the face record it vouches for; throws otherwise.
+ * Accept each nonce only once.
+ */
+export declare function verifyFaceRecord(token: string, publicKey: Uint8Array, facePng: Uint8Array, now?: number | undefined | null): Receipt
 
 /** Checks a receipt's signature and expiry; throws if invalid. `now` is Unix seconds. */
 export declare function verifyReceipt(token: string, publicKey: Uint8Array, now?: number | undefined | null): Receipt

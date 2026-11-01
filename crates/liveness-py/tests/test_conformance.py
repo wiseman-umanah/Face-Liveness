@@ -19,7 +19,7 @@ def close(expected, actual, tol):
     return abs(expected - actual) <= tol
 
 
-APPROX = ("signals", "real_score")
+APPROX = ("signals", "real_score", "face_quality")
 
 
 def check(expected, actual):
@@ -86,18 +86,31 @@ def test_engine_case(case):
             "face_counts": face_counts,
             "signals": signals,
             "real_score": real_score,
+            "face_quality": engine.capture.quality if engine.capture else None,
         },
     )
+
+
+def face_record(case):
+    """The bytes a case hands to verify_face_record (one byte flipped if `face_tampered`)."""
+    data = bytearray((ROOT / case["face_record"]).read_bytes())
+    if case.get("face_tampered"):
+        data[100] ^= 1
+    return bytes(data)
 
 
 @pytest.mark.parametrize("case", CASES["receipt_cases"], ids=lambda c: c["name"])
 def test_receipt_case(case):
     key = bytes.fromhex(case["public_key_hex"])
+    if "face_record" in case:
+        verify = lambda: faceliveness.verify_face_record(case["token"], key, face_record(case), now=case["now"])
+    else:
+        verify = lambda: faceliveness.verify_receipt(case["token"], key, now=case["now"])
     if "expected_error" in case:
         with pytest.raises(ValueError, match=case["expected_error"]):
-            faceliveness.verify_receipt(case["token"], key, now=case["now"])
+            verify()
         return
-    r = faceliveness.verify_receipt(case["token"], key, now=case["now"])
+    r = verify()
     check(
         case["expected"],
         {
@@ -108,6 +121,8 @@ def test_receipt_case(case):
             "frames": r.frames,
             "frames_sha256": r.frames_sha256,
             "real_score": r.real_score,
+            "face_sha256": r.face_sha256,
+            "face_quality": r.face_quality,
             "issued_at": r.issued_at,
             "expires_at": r.expires_at,
         },

@@ -107,6 +107,7 @@ async function sendToServer(pixels) {
 async function start() {
   $('start').disabled = true
   $('result').hidden = true
+  $('face-box').hidden = true
   const serverMode = serverAvailable && $('server-mode').checked
   $('mode').textContent = serverMode ? 'Server-verified' : 'On-device result (not tamper-proof)'
 
@@ -197,9 +198,24 @@ async function finish(status) {
   $('result').className = `result ${passed ? 'passed' : 'failed'}`
   $('result').hidden = false
 
+  // The face record: the session's best face, aligned for face matching.
+  const face = run.serverMode
+    ? status.facePng && { png: Uint8Array.from(atob(status.facePng), (ch) => ch.charCodeAt(0)), quality: status.faceQuality }
+    : (await ask({ type: 'capture' }, 'capture')).capture
+  if (face) {
+    $('face').src = URL.createObjectURL(new Blob([face.png], { type: 'image/png' }))
+    $('face-caption').textContent =
+      `Face record for matching: ${face.png.length.toLocaleString()} bytes, quality ${face.quality.toFixed(2)}` +
+      (run.serverMode ? '. The signed receipt vouches for this exact image.' : '.')
+    $('face-box').hidden = false
+    log('face', { bytes: face.png.length, quality: Number(face.quality.toFixed(3)) })
+  }
+
   if (status.receipt) {
-    // A separate endpoint verifies the signed receipt, as another service would.
-    const verified = await (await fetch('api/verify', { method: 'POST', body: status.receipt })).json()
+    // A separate endpoint checks receipt + face record, as your face-matching service would.
+    const verified = await (
+      await fetch('api/verify', { method: 'POST', body: JSON.stringify({ receipt: status.receipt, facePng: status.facePng }) })
+    ).json()
     $('receipt').textContent = `${status.receipt}\n\nVerified by /api/verify:\n${JSON.stringify(verified, null, 2)}`
     $('receipt-box').hidden = false
     log('receipt', { verified })
