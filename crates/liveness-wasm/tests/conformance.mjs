@@ -10,7 +10,7 @@ const wasm = require('../pkg-node/liveness_wasm.js')
 
 const root = join(import.meta.dirname, '../../..')
 const cases = JSON.parse(readFileSync(join(root, 'tests/conformance/cases.json'), 'utf8'))
-const APPROX = ['signals', 'real_score']
+const APPROX = ['signals', 'real_score', 'face_quality']
 
 function close(expected, actual, tol) {
   if (expected && typeof expected === 'object') {
@@ -69,19 +69,30 @@ for (const c of cases.engine_cases) {
   check(c.name, c.expected, {
     status: r.status, fail_reason: r.failReason ?? null, at_ms: r.done ? ts : null,
     face_counts: faceCounts, signals, real_score: realScore,
+    face_quality: engine.capture()?.quality ?? null,
   })
   passed++
 }
 
+// The bytes a case hands to verifyFaceRecord (one byte flipped if `face_tampered`).
+function faceRecord(c) {
+  const data = readFileSync(join(root, c.face_record))
+  if (c.face_tampered) data[100] ^= 1
+  return data
+}
+
 for (const c of cases.receipt_cases) {
   const key = Buffer.from(c.public_key_hex, 'hex')
+  const verify = () =>
+    c.face_record ? wasm.verifyFaceRecord(c.token, key, faceRecord(c), c.now) : wasm.verifyReceipt(c.token, key, c.now)
   if (c.expected_error) {
-    assert.throws(() => wasm.verifyReceipt(c.token, key, c.now), new RegExp(c.expected_error), c.name)
+    assert.throws(verify, new RegExp(c.expected_error), c.name)
   } else {
-    const r = wasm.verifyReceipt(c.token, key, c.now)
+    const r = verify()
     check(c.name, c.expected, {
       nonce: r.nonce, challenges: r.challenges, passed: r.passed, fail_reason: r.failReason ?? null,
       frames: r.frames, frames_sha256: r.framesSha256, real_score: r.realScore ?? null,
+      face_sha256: r.faceSha256 ?? null, face_quality: r.faceQuality ?? null,
       issued_at: r.issuedAt, expires_at: r.expiresAt,
     })
   }

@@ -28,6 +28,8 @@ export interface SessionOptions {
   faceLostMs?: number
   /** Fail a completed session whose mean realScore is below this (off by default). */
   minRealScore?: number
+  /** Side of the face record crop, engine.capture() (default 112; 32-512). */
+  captureSize?: number
 }
 
 export interface FrameOptions {
@@ -67,6 +69,20 @@ export interface FrameResult {
 }
 
 export interface Ticket { nonce: string; challenges: Challenge[]; issuedAt: number; expiresAt: number }
+/** The best face of a session, aligned for face matching. */
+export interface FaceCapture {
+  /** The aligned face as PNG: store and send these exact bytes. */
+  png: Uint8Array
+  /** The same image as raw RGB bytes (size * size * 3). */
+  rgb: Uint8Array
+  size: number
+  /** 0-1 suitability for matching (frontal, eyes open, mouth closed, sharp, well lit). */
+  quality: number
+  timestampMs: number
+  /** Hex SHA-256 of png, as recorded in the receipt. */
+  sha256: string
+}
+
 export interface Receipt {
   nonce: string
   challenges: Challenge[]
@@ -75,6 +91,8 @@ export interface Receipt {
   frames: number
   framesSha256: string
   realScore?: number
+  faceSha256?: string
+  faceQuality?: number
   issuedAt: number
   expiresAt: number
 }
@@ -238,7 +256,7 @@ impl Engine {
     ) -> Result<Engine, JsError> {
         let inner = LivenessEngine::new(parse_challenges(challenges)?, config(&options)?)
             .map_err(js_err)?;
-        Ok(Self { inner })
+        Self::wrap(inner, &options)
     }
 
     /// `count` challenges in an order drawn from the browser's crypto randomness.
@@ -248,7 +266,31 @@ impl Engine {
     ) -> Result<Engine, JsError> {
         let inner = LivenessEngine::random(count as usize, random_seed()?, config(&options)?)
             .map_err(js_err)?;
+        Self::wrap(inner, &options)
+    }
+
+    fn wrap(mut inner: LivenessEngine, options: &JsValue) -> Result<Engine, JsError> {
+        if let Some(size) = get_u64(options, "captureSize")? {
+            inner.set_capture_size(u32::try_from(size).unwrap_or(u32::MAX));
+        }
         Ok(Self { inner })
+    }
+
+    /// The best face of the session so far, aligned for face matching, or null.
+    /// On-device results are not tamper-proof: a server should produce the face record it trusts.
+    #[wasm_bindgen(unchecked_return_type = "FaceCapture | null")]
+    pub fn capture(&self) -> JsValue {
+        let Some(c) = self.inner.capture() else {
+            return JsValue::NULL;
+        };
+        let out = Object::new();
+        set(&out, "png", js_sys::Uint8Array::from(c.png.as_slice()));
+        set(&out, "rgb", js_sys::Uint8Array::from(c.rgb.as_slice()));
+        set(&out, "size", c.size);
+        set(&out, "quality", c.quality);
+        set(&out, "timestampMs", c.timestamp_ms as f64);
+        set(&out, "sha256", c.sha256_hex());
+        out.into()
     }
 
     #[wasm_bindgen(getter, unchecked_return_type = "Challenge[]")]
@@ -386,6 +428,26 @@ pub fn verify_receipt(
     let r = self::public_key(public_key)?
         .verify_receipt(token, now)
         .map_err(js_err)?;
+    Ok(receipt_object(r))
+}
+
+/// For the face-matching service: checks the receipt, that the session passed, and that
+/// `facePng` is exactly the face record it vouches for; throws otherwise.
+#[wasm_bindgen(js_name = verifyFaceRecord, unchecked_return_type = "Receipt")]
+pub fn verify_face_record(
+    token: &str,
+    public_key: &[u8],
+    face_png: &[u8],
+    now: Option<f64>,
+) -> Result<JsValue, JsError> {
+    let now = now.map_or_else(now_secs, |n| n as u64);
+    let r = self::public_key(public_key)?
+        .verify_face_record(token, now, face_png)
+        .map_err(js_err)?;
+    Ok(receipt_object(r))
+}
+
+fn receipt_object(r: liveness_core::attest::Receipt) -> JsValue {
     let out = Object::new();
     set(&out, "nonce", r.nonce.clone());
     set(&out, "challenges", names(&r.challenges));
@@ -398,9 +460,15 @@ pub fn verify_receipt(
     if let Some(s) = r.real_score {
         set(&out, "realScore", s);
     }
+    if let Some(h) = r.face_sha256 {
+        set(&out, "faceSha256", h);
+    }
+    if let Some(q) = r.face_quality {
+        set(&out, "faceQuality", q);
+    }
     set(&out, "issuedAt", r.issued_at as f64);
     set(&out, "expiresAt", r.expires_at as f64);
-    Ok(out.into())
+    out.into()
 }
 
 #[wasm_bindgen]

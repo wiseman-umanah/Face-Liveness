@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the WebAssembly module and its JS bindings:
-#   pkg/       for browsers (ES module, `--target web`), used by demo/
+#   pkg/       for browsers (ES module, `--target web`), used by demo/ and published to npm
+#              as `faceliveness-web`
 #   pkg-node/  the same .wasm for Node, used by the tests
 # Needs: rustup target add wasm32-unknown-unknown; cargo install wasm-bindgen-cli --version 0.2.129
 set -euo pipefail
@@ -11,4 +12,6 @@ cargo build --release --target wasm32-unknown-unknown -p liveness-wasm
 wasm="$root/target/wasm32-unknown-unknown/release/liveness_wasm.wasm"
 wasm-bindgen --target web --out-dir pkg "$wasm"
 wasm-bindgen --target nodejs --out-dir pkg-node "$wasm"
+# npm package metadata for `faceliveness-web` (publish from pkg/)
+cp npm/package.json npm/README.md npm/LICENSE pkg/
 ls -la pkg/*.wasm

@@ -1,8 +1,9 @@
 name: Release
 
-# Push a tag like v0.1.0 to build and publish `faceliveness` to PyPI and npm.
-# The version in Cargo.toml, crates/liveness-py/pyproject.toml and
-# crates/liveness-node/package.json must match the tag.
+# Push a tag like v0.1.0 to build and publish `faceliveness` to PyPI and npm, and the browser
+# package `faceliveness-web` to npm. The version in Cargo.toml,
+# crates/liveness-py/pyproject.toml, crates/liveness-node/package.json and
+# crates/liveness-wasm/npm/package.json must match the tag.
 #
 # One-time setup (see README "Releasing"):
 #   - GitHub environment named "release" (add required reviewers to approve each publish)
@@ -30,8 +31,9 @@ jobs:
           cargo_v=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           py_v=$(grep -m1 '^version' crates/liveness-py/pyproject.toml | cut -d'"' -f2)
           node_v=$(node -p "require('./crates/liveness-node/package.json').version")
-          echo "Cargo $cargo_v, Python $py_v, Node $node_v, ref ${GITHUB_REF_NAME}"
-          [ "$cargo_v" = "$py_v" ] && [ "$py_v" = "$node_v" ] || { echo "versions differ"; exit 1; }
+          web_v=$(node -p "require('./crates/liveness-wasm/npm/package.json').version")
+          echo "Cargo $cargo_v, Python $py_v, Node $node_v, Web $web_v, ref ${GITHUB_REF_NAME}"
+          [ "$cargo_v" = "$py_v" ] && [ "$py_v" = "$node_v" ] && [ "$node_v" = "$web_v" ] || { echo "versions differ"; exit 1; }
           if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$cargo_v" ]; then
             echo "tag ${GITHUB_REF_NAME} does not match version v$cargo_v"; exit 1
           fi
@@ -154,10 +156,38 @@ jobs:
           path: crates/liveness-node/*.node
           if-no-files-found: error
 
+  wasm-build:
+    name: Browser package (faceliveness-web)
+    needs: versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.129
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: crates/liveness-wasm/build.sh
+      - name: Test against the shared conformance cases
+        run: node crates/liveness-wasm/tests/conformance.mjs
+      - name: Check package contents
+        working-directory: crates/liveness-wasm/pkg
+        run: npm pack --dry-run
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-package
+          path: crates/liveness-wasm/pkg
+          if-no-files-found: error
+
   publish:
     name: Publish to PyPI and npm
     if: github.ref_type == 'tag'
-    needs: [sdist, wheel-test, npm-build]
+    needs: [sdist, wheel-test, npm-build, wasm-build]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -200,3 +230,13 @@ jobs:
           pnpm napi create-npm-dirs
           pnpm napi artifacts
           npm publish --provenance --access public
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-package
+          path: web-package
+      - name: Publish faceliveness-web
+        working-directory: web-package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public

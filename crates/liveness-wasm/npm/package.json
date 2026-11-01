@@ -1,0 +1,27 @@
+{
+  "name": "faceliveness-web",
+  "version": "0.1.0",
+  "description": "On-device face liveness checks in the browser (WebAssembly): blink, head turn, mouth open, face record for matching",
+  "type": "module",
+  "main": "liveness_wasm.js",
+  "module": "liveness_wasm.js",
+  "types": "liveness_wasm.d.ts",
+  "files": [
+    "liveness_wasm.js",
+    "liveness_wasm.d.ts",
+    "liveness_wasm_bg.wasm",
+    "liveness_wasm_bg.wasm.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": ["face", "liveness", "anti-spoofing", "biometrics", "kyc", "webassembly", "wasm"],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wiseman-umanah/Face-Liveness.git",
+    "directory": "crates/liveness-wasm"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
